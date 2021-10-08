@@ -1,5 +1,7 @@
 #lang racket/base
 (require racket/fixnum
+         racket/file
+         "private/port.rkt"
          "private/public.rkt"
          "private/screen.rkt"
          "private/pos.rkt"
@@ -10,7 +12,7 @@
 
 (provide call-with-expression-editor
          current-expression-editor-lexer
-         current-expression-editor-check-ready
+         current-expression-editor-ready-checker
          current-expression-editor-reader
          current-expression-editor-post-skipper)
 
@@ -73,7 +75,7 @@
 (define-public (ee-read)
   (define (accept ee entry kf)
     (let* ([str (entry->string entry)]
-           [sip (open-input-string str)])
+           [sip (open-input-string/count str)])
       (define (fail exn)
         (define (report sop)
           (display (exn-message exn) sop))
@@ -108,7 +110,7 @@
         (ee-flush)
         (update-history! ee entry)
         ;; skip close delimiters, whitespace, and comments?
-        (define fp (file-position sip))
+        (define fp (input-port-position sip))
         (define skip ((current-expression-editor-post-skipper) sip))
         ;; save remainder of entry, if any, as histnow
         (set-eestate-histnow! ee (substring str (fx+ fp skip) (string-length str)))
@@ -126,7 +128,7 @@
         (let ([c (ee-read-char)])
           (let ([x (if (eof-object? c)
                        (lambda (ee entry c) #f)
-                       (hash-ref table c ee-insert-self))])
+                       (hash-ref table c (lambda () ee-insert-self)))])
             (cond
               [(procedure? x)
                (let ([n (eestate-repeat-count ee)])
@@ -521,7 +523,7 @@
   (lambda (ee entry c)
     (cond
       [(null-entry? entry) entry]
-      [((current-expression-editor-check-ready)
+      [((current-expression-editor-ready-checker)
         (open-input-string (entry->string entry)))
        (let loop ()
          (delete-to-eol ee entry)
@@ -1109,6 +1111,20 @@
   (ebk "^Z"      ee-suspend-process)                  ; ^Z
 )
 
+(define (open-expression-editor history)
+  (cond
+    [(init-screen)
+     (define ee (make-eestate))
+     (ee-set-history! ee history)
+     ee]
+    [else #f]))
+
+(define (close-expression-editor ee)
+  (ee-get-history ee))
+
+(define (expression-editor-read ee)
+  (ee-prompt-and-read ee 1))
+
 (define call-with-expression-editor
   (lambda (proc)
     (let ([ee #f])
@@ -1116,12 +1132,10 @@
         (if (cond
               [(eestate? ee) #t]
               [(eq? ee 'failed) #f]
-              [(init-screen)
-               (set! ee (make-eestate))
-               (let ([histfile ($expeditor-history-file)])
-                 (when histfile
-                   (with-handlers ([exn:fail? void]) (ee-load-history ee histfile))))
-               #t]
+              [(open-expression-editor (current-expression-editor-history))
+               => (lambda (new-ee)
+                    (set! ee new-ee)
+                    #t)]
               [else (set! ee 'failed) #f])
             (ee-prompt-and-read ee n)
             (default-prompt-and-read n)))
@@ -1131,16 +1145,19 @@
                              (expeditor-prompt-and-read 1))))
                    list)])
         (when (eestate? ee)
-          (let ([histfile ($expeditor-history-file)])
-            (when histfile
-              (with-handlers ([exn:fail? void]) (ee-save-history ee histfile)))))
+          (current-expression-editor-history (close-expression-editor ee)))
         (apply values val*)))))
 
 (module+ main
-  (current-namespace (make-base-namespace))
   (current-expression-editor-lexer (dynamic-require 'syntax-color/racket-lexer 'racket-lexer))
   (current-expression-editor-reader (lambda (in) (read-syntax (object-name in) in)))
-  (call-with-expression-editor
-   (lambda (get)
-     (parameterize ([current-prompt-read get])
-       (read-eval-print-loop)))))
+  (define ee (open-expression-editor (map bytes->string/utf-8
+                                          (get-preference 'readline-input-history (lambda () null)))))
+  (current-prompt-read (lambda () (expression-editor-read ee)))
+  (exit-handler
+   (let ([old (exit-handler)])
+     (lambda (v)
+       (define history (close-expression-editor ee))
+       (put-preferences '(readline-input-history) (list (map string->bytes/utf-8 history)))
+       (old v))))
+  (read-eval-print-loop))

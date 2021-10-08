@@ -17,7 +17,9 @@
          current-expression-editor-lexer
          current-expression-editor-reader
          current-expression-editor-post-skipper
-         current-expression-editor-check-ready)
+         current-expression-editor-ready-checker
+         current-expression-editor-completer
+         current-expression-editor-history)
 
 (define (fxnonnegative? v)
   (and (fixnum? v)
@@ -28,11 +30,11 @@
    ; general theory: exclude short ids and ids that will come up early
    ; in an alphabetical search with short prefix.  include common ids that
    ; come up annoyingly late in such a search.
-    '(append apply call/cc call-with-values define display display-string
-      define-syntax define-record null? quote quotient reverse read-char
-      substring string-ref string-length string? string=? string-set!
-      syntax-case syntax-rules unless vector-ref vector-length vector?
-      vector-set! vector)
+   '(append apply call/cc call-with-values define display display-string
+            define-syntax define-record null? quote quotient reverse read-char
+            substring string-ref string-length string? string=? string-set!
+            syntax-case syntax-rules unless vector-ref vector-length vector?
+            vector-set! vector)
     (lambda (x)
       (unless (and (list? x) (andmap symbol? x))
         (error 'ee-common-identifiers "~s is not a list of symbols" x))
@@ -110,7 +112,7 @@
                   (lambda (p)
                     p)))
 
-(define current-expression-editor-check-ready
+(define current-expression-editor-ready-checker
   (make-parameter (lambda (ip)
                     (with-handlers ([exn:fail:read? (lambda (exn) #f)])
                       (read ip)
@@ -118,3 +120,11 @@
                   (lambda (p)
                     p)))
 
+(define current-expression-editor-history
+  (make-parameter null))
+
+(define current-expression-editor-completer
+  (make-parameter (lambda (prefix)
+                    (values (parameterize ([current-namespace (make-base-namespace)])
+                              (namespace-mapped-symbols))
+                            (ee-common-identifiers)))))

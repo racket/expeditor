@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/fixnum
+         "port.rkt"
          "public.rkt"
          "screen.rkt"
          "pos.rkt"
@@ -1055,7 +1056,7 @@
   ; 2. search forward, stacking left/right delimiters and their indices
   ; 3. if matching delimiter found, convert string index to pos
   (let* ([s (entry->string entry #:up-to-row row #:up-to-col (fx+ col 1))]
-         [ip (open-input-string s)])
+         [ip (open-input-string/count s)])
     (let loop ([stack '()] [state #f])
       (with-handlers* ([exn:fail? (lambda (exn) (loop '() state))])
         (let-values ([(type value start end new-state) (read-token ip state)])
@@ -1087,7 +1088,7 @@
     ; 2. search forward until matching delimiter, eof, or error
     ; 3. if matching delimiter found, convert string index to pos
     (let* ([s (entry->string entry #:from-row row #:from-col col)]
-           [ip (open-input-string s)])
+           [ip (open-input-string/count s)])
       (with-handlers ([exn:fail? (lambda (exn) #f)])
         (let loop ([stack '()] [state #f])
           (let-values ([(type value start end new-state) (read-token ip state)])
@@ -1109,7 +1110,7 @@
 
 (define (find-next-sexp-backward ee entry row col)
   (let* ([s (entry->string entry #:up-to-row row #:up-to-col col)]
-         [ip (open-input-string s)])
+         [ip (open-input-string/count s)])
     (with-handlers ([exn:fail? (lambda (exn) #f)])
       (let loop ([stack '()] [last-start 0] [state #f])
         (let-values ([(type value start end new-state) (read-token ip state)])
@@ -1143,7 +1144,7 @@
   ; ordinarily stops at first s-expression if it follows whitespace (or
   ; comments), but always moves to second if ignore-whitespace? is true
   (let* ([s (entry->string entry #:from-row row #:from-col col)]
-         [ip (open-input-string s)])
+         [ip (open-input-string/count s)])
     (define (skip start state)
       (index->pos s
                   (with-handlers ([exn:fail? (lambda (exn) start)])
@@ -1260,7 +1261,7 @@
                  ; otherwise, if left paren is followed by a symbol,
                  ; indent under second item or use standard indent if
                  ; second item is too far out or not present
-                 (let ([ip (open-input-string
+                 (let ([ip (open-input-string/count
                             (let ([s (lns->str lns mrow)])
                               (substring s mcol (string-length s))))])
                    (with-handlers ([exn:fail? (lambda (exn) #f)])
@@ -1357,23 +1358,21 @@
   )
 
 (define (id-completions ee entry)
-  (define (idstring<? prefix)
-    (let ([common (ee-common-identifiers)]
-          [scheme-syms (namespace-mapped-symbols)])
-      (lambda (s1 s2)
-        (let ([x1 (string->symbol (string-append prefix s1))]
-              [x2 (string->symbol (string-append prefix s2))])
-          ; prefer common
-          (let ([m1 (memq x1 common)] [m2 (memq x2 common)])
-            (if m1
-                (or (not m2) (< (length m2) (length m1)))
-                (and (not m2)
-                     ; prefer user-defined
-                     (let ([u1 (not (memq x1 scheme-syms))]
-                           [u2 (not (memq x2 scheme-syms))])
-                       (if u1
-                           (or (not u2) (string<? s1 s2))
-                           (and (not u2) (string<? s1 s2)))))))))))
+  (define (idstring<? prefix common scheme-syms)
+    (lambda (s1 s2)
+      (let ([x1 (string->symbol (string-append prefix s1))]
+            [x2 (string->symbol (string-append prefix s2))])
+        ; prefer common
+        (let ([m1 (memq x1 common)] [m2 (memq x2 common)])
+          (if m1
+              (or (not m2) (< (length m2) (length m1)))
+              (and (not m2)
+                   ; prefer user-defined
+                   (let ([u1 (not (memq x1 scheme-syms))]
+                         [u2 (not (memq x2 scheme-syms))])
+                     (if u1
+                         (or (not u2) (string<? s1 s2))
+                         (and (not u2) (string<? s1 s2))))))))))
   (define (completion str1 str2)
     (let ([n1 (string-length str1)] [n2 (string-length str2)])
       (and (fx>= n2 n1)
@@ -1406,24 +1405,27 @@
         (let ([s (let ([s (lns->str (entry-lns entry) (entry-row entry))])
                    (substring s c (string-length s)))])
           ((with-handlers* ([exn:fail? (lambda (exn)
-                                         (if (and (fx> (string-length s) 0) (char=? (string-ref s 0) #\"))
-                                             (fn-completions (substring s 1 (string-length s)))
-                                             (loop (fx+ c 1))))])
-             (let-values ([(type value start end) (read-token (open-input-string s) #f)])
+                                         (lambda ()
+                                           (if (and (fx> (string-length s) 0) (char=? (string-ref s 0) #\"))
+                                               (fn-completions (substring s 1 (string-length s)))
+                                               (loop (fx+ c 1)))))])
+             (let-values ([(type value start end new-state) (read-token (open-input-string/count s) #f)])
                (lambda ()
                  (cond
                    [(and (fx= (fx+ c end) (entry-col entry))
                          (eq? type 'atomic)
                          (symbol? value))
                     (let ([prefix (symbol->string value)])
-                      (values prefix
-                              (sort (foldl (lambda (x suffix*)
-                                             (cond
-                                               [(completion prefix (symbol->string x))
-                                                => (lambda (suffix) (cons suffix suffix*))]
-                                               [else suffix*]))
-                                           '() (namespace-mapped-symbols))
-                                    (idstring<? prefix))))]
+                      (let-values ([(syms common) ((current-expression-editor-completer) prefix)])
+                        (values prefix
+                                (sort (foldl (lambda (x suffix*)
+                                               (cond
+                                                 [(completion prefix (symbol->string x))
+                                                  => (lambda (suffix) (cons suffix suffix*))]
+                                                 [else suffix*]))
+                                             '()
+                                             syms)
+                                      (idstring<? prefix common '())))))]
                    [(and (fx= (fx+ c end -1) (entry-col entry))
                          (eq? type 'atomic)
                          (string? value))
