@@ -1149,6 +1149,7 @@
         (apply values val*)))))
 
 (module+ main
+  (current-namespace (make-base-namespace))
   (current-expression-editor-lexer (dynamic-require 'syntax-color/racket-lexer 'racket-lexer))
   (current-expression-editor-reader (lambda (in) (read-syntax (object-name in) in)))
   (define ee (open-expression-editor (map bytes->string/utf-8

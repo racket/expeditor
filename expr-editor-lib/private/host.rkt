@@ -32,12 +32,14 @@
   (vm-eval '(foreign-procedure name (arg ...) result)))
 
 (define init-term (foreign-procedure "(cs)ee_init_term" () boolean))
-(define $ee-read-char (foreign-procedure "(cs)ee_read_char" (boolean) scheme-object))
+(define $ee-read-char/blocking (foreign-procedure "(cs)ee_read_char" (boolean) scheme-object))
 (define $ee-write-char (foreign-procedure "(cs)ee_write_char" (wchar_t) void))
 (define ee-flush (foreign-procedure "(cs)ee_flush" () void))
 (define get-screen-size (foreign-procedure "(cs)ee_get_screen_size" () scheme-object))
 (define raw-mode (foreign-procedure "(cs)ee_raw" () void))
 (define no-raw-mode (foreign-procedure "(cs)ee_noraw" () void))
+(define post-output-mode (foreign-procedure "(cs)ee_postoutput" () void))
+(define no-post-output-mode (foreign-procedure "(cs)ee_nopostoutput" () void))
 (define enter-am-mode (foreign-procedure "(cs)ee_enter_am_mode" () void))
 (define exit-am-mode (foreign-procedure "(cs)ee_exit_am_mode" () void))
 (define nanosleep (foreign-procedure "(cs)ee_nanosleep" (unsigned-32 unsigned-32) void))
@@ -55,3 +57,14 @@
 (define bell (foreign-procedure "(cs)ee_bell" () void))
 (define $carriage-return (foreign-procedure "(cs)ee_carriage_return" () void))
 (define line-feed (foreign-procedure "(cs)ee_line_feed" () void))
+
+(define ($ee-read-char block?)
+  (cond
+    [block?
+     (post-output-mode)
+     (sync (current-input-port))
+     (no-post-output-mode)
+     (or ($ee-read-char/blocking #f)
+         ($ee-read-char block?))]
+    [else
+     ($ee-read-char/blocking #f)]))

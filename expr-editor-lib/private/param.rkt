@@ -16,6 +16,7 @@
          ee-history-limit
          current-expression-editor-lexer
          current-expression-editor-reader
+         current-expression-editor-parentheses
          current-expression-editor-post-skipper
          current-expression-editor-ready-checker
          current-expression-editor-completer
@@ -94,6 +95,11 @@
                            (values (string ch) 'atomic #f start end))]))
                   (lambda (p)
                     p)))
+
+(define current-expression-editor-parentheses
+  (make-parameter '((|(| |)|)
+                    (|[| |]|)
+                    (|{| |}|))))
 
 (define current-expression-editor-reader
   (make-parameter (lambda (ip)

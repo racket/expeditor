@@ -1061,23 +1061,18 @@
       (with-handlers* ([exn:fail? (lambda (exn) (loop '() state))])
         (let-values ([(type value start end new-state) (read-token ip state)])
           (case type
-            [(atomic box dot insert mark quote) (loop stack new-state)]
-            [(lbrack record-brack)
-             (loop (cons (cons 'rbrack end) stack) new-state)]
-            [(lparen vfxnparen vfxparen vflnparen vflparen vnparen vparen vu8nparen vu8paren)
-             (loop (cons (cons 'rparen end) stack) new-state)]
-            [(rbrack rparen)
+            [(eof fasl) #f]
+            [(opener)
+             (loop (cons (cons (opener->closer value) end) stack) new-state)]
+            [(closer)
              (if (= end (string-length s))
                  (and (not (null? stack))
-                      (or lax? (eq? (caar stack) type))
+                      (or lax? (eq? (caar stack) value))
                       (index->pos s (fx- (cdar stack) 1) 0 0))
-                 (if (and (not (null? stack)) (eq? (caar stack) type))
+                 (if (and (not (null? stack)) (eq? (caar stack) value))
                      (loop (cdr stack) new-state)
                      (loop '() new-state)))]
-            [(eof fasl) #f]
-            [else
-             (log-warning "expeditor: unexpected token type ~s from read-token" type)
-             #f]))))))
+            [else (loop stack new-state)]))))))
 
 (define (find-matching-delim-forward ee entry row col lax?)
   (let ([lns (entry-lns entry)])
@@ -1093,20 +1088,15 @@
         (let loop ([stack '()] [state #f])
           (let-values ([(type value start end new-state) (read-token ip state)])
             (case type
-              [(atomic box dot insert mark quote) (loop stack new-state)]
-              [(lbrack record-brack)
-               (loop (cons 'rbrack stack) new-state)]
-              [(lparen vfxnparen vfxparen vflnparen vflparen vnparen vparen vu8nparen vu8paren)
-               (loop (cons 'rparen stack) new-state)]
-              [(rbrack rparen)
-               (if (fx= (length stack) 1)
-                   (and (or lax? (eq? (car stack) type))
-                        (index->pos s start row col))
-                   (and (eq? (car stack) type) (loop (cdr stack) new-state)))]
               [(eof fasl) #f]
-              [else
-               (log-warning "expeditor: unexpected token type ~s from read-token" type)
-               #f])))))))
+              [(opener)
+               (loop (cons (opener->closer value) stack) new-state)]
+              [(closer)
+               (if (fx= (length stack) 1)
+                   (and (or lax? (eq? (car stack) value))
+                        (index->pos s start row col))
+                   (and (eq? (car stack) value) (loop (cdr stack) new-state)))]
+              [else (loop stack new-state)])))))))
 
 (define (find-next-sexp-backward ee entry row col)
   (let* ([s (entry->string entry #:up-to-row row #:up-to-col col)]
@@ -1115,30 +1105,26 @@
       (let loop ([stack '()] [last-start 0] [state #f])
         (let-values ([(type value start end new-state) (read-token ip state)])
           (case type
-            [(atomic dot insert mark)
-             (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
-                 (loop (cdr stack) (cdar stack) new-state)
-                 (loop stack start new-state))]
+            [(eof) (and last-start (index->pos s last-start 0 0))]
             [(box quote)
              (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
                  (loop stack #f new-state)
                  (loop (cons (cons 'qubx start) stack) #f new-state))]
-            [(eof) (and last-start (index->pos s last-start 0 0))]
-            [(lbrack record-brack)
+            [(opener)
              (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
-                 (loop (cons (cons 'rbrack (cdar stack)) (cdr stack)) #f new-state)
-                 (loop (cons (cons 'rbrack start) stack) #f new-state))]
-            [(lparen vfxnparen vfxparen vflnparen vflparen vnparen vparen vu8nparen vu8paren)
-             (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
-                 (loop (cons (cons 'rparen (cdar stack)) (cdr stack)) #f new-state)
-                 (loop (cons (cons 'rparen start) stack) #f new-state))]
-            [(rbrack rparen)
-             (if (and (not (null? stack)) (eq? (caar stack) type))
+                 (loop (cons (cons (opener->closer value) (cdar stack)) (cdr stack)) #f new-state)
+                 (loop (cons (cons (opener->closer value) start) stack) #f new-state))]
+            [(closer)
+             (if (and (not (null? stack)) (eq? (caar stack) value))
                  (loop (cdr stack) (cdar stack) new-state)
                  (loop '() #f new-state))]
             [else
-             (log-warning "expeditor: unexpected token type ~s from read-token" type)
-             #f]))))))
+             ;; 'qubx it meant to be a quote, unquote, box prefix, etc.,
+             ;; which are not currently recognized; a language-specific
+             ;; navigation function should take care of that
+             (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
+                 (loop (cdr stack) (cdar stack) new-state)
+                 (loop stack start new-state))]))))))
 
 (define (find-next-sexp-forward ee entry row col ignore-whitespace?)
   ; ordinarily stops at first s-expression if it follows whitespace (or
@@ -1157,31 +1143,19 @@
           (if (and first? (not ignore-whitespace?) (fx> start 0))
               (and (not ignore?) (index->pos s start row col))
               (case type
-                [(atomic dot insert mark)
-                 (if (null? stack)
-                     (and (not ignore?) (skip start new-state))
-                     (loop stack #f ignore? new-state))]
-                [(box) (loop stack #f ignore? new-state)]
-                [(quote)
-                 (when (and ignore-whitespace?
-                            (eq? value 'datum-comment)
-                            (null? stack))
-                   (loop '() #f #t new-state))
-                 (loop stack #f ignore? new-state)]
                 [(eof fasl) #f]
-                [(lbrack record-brack) (loop (cons 'rbrack stack) #f ignore? new-state)]
-                [(lparen vfxnparen vfxparen vflnparen vflparen vflnparen vflparen vnparen vparen vu8nparen vu8paren)
-                 (loop (cons 'rparen stack) #f ignore? new-state)]
-                [(rbrack rparen)
+                [(opener) (loop (cons (opener->closer value) stack) #f ignore? new-state)]
+                [(closer)
                  (and (not (null? stack))
-                      (eq? (car stack) type)
+                      (eq? (car stack) value)
                       (let ([stack (cdr stack)])
                         (if (null? stack)
                             (and (not ignore?) (skip start new-state))
                             (loop stack #f ignore? new-state))))]
                 [else
-                 (log-warning "expeditor: unexpected token type ~s from read-token" type)
-                 #f])))))))
+                 (if (null? stack)
+                     (and (not ignore?) (skip start new-state))
+                     (loop stack #f ignore? new-state))])))))))
 
 (define-public (find-next-word find-previous-word)
   (define separator?
@@ -1267,7 +1241,7 @@
                    (with-handlers ([exn:fail? (lambda (exn) #f)])
                      (and (char=? (read-char ip) lpchar)
                           (let-values ([(t1 v1 s1 e1 state) (read-token ip #f)])
-                            (and (and (eq? t1 'atomic) (symbol? v1))
+                            (and (eq? t1 'symbol)
                                  (let-values ([(t2 v2 s2 e2 state2) (read-token ip state)])
                                    (if (and (not (eq? t2 'eof))
                                             (fx< s2 6)
@@ -1413,8 +1387,7 @@
                (lambda ()
                  (cond
                    [(and (fx= (fx+ c end) (entry-col entry))
-                         (eq? type 'atomic)
-                         (symbol? value))
+                         (eq? type 'symbol))
                     (let ([prefix (symbol->string value)])
                       (let-values ([(syms common) ((current-expression-editor-completer) prefix)])
                         (values prefix
@@ -1427,7 +1400,7 @@
                                              syms)
                                       (idstring<? prefix common '())))))]
                    [(and (fx= (fx+ c end -1) (entry-col entry))
-                         (eq? type 'atomic)
+                         (eq? type 'string)
                          (string? value))
                     (fn-completions value)]
                    [else (loop (fx+ c end))])))))))))
