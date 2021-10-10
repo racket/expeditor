@@ -38,7 +38,10 @@
                     (if (string? lexeme)
                         (string->symbol lexeme)
                         lexeme)))]
-    [else (values type lexeme)]))
+    [else
+     (if (hash? type)
+         (translate-type (hash-ref type 'type 'unknown) paren lexeme)
+         (values type lexeme))]))
 
 (define (opener->closer paren)
   (for/or ([p (in-list (current-expression-editor-parentheses))])

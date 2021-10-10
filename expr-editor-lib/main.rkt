@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/fixnum
          racket/file
+         racket/symbol
          "private/port.rkt"
          "private/public.rkt"
          "private/screen.rkt"
@@ -14,7 +15,9 @@
          current-expression-editor-lexer
          current-expression-editor-ready-checker
          current-expression-editor-reader
-         current-expression-editor-post-skipper)
+         current-expression-editor-post-skipper
+         current-expression-editor-parentheses
+         current-expression-editor-grouper)
 
 ;;; Based on:
 ;;;
@@ -372,8 +375,15 @@
 
 (define ee-insert-self
   (lambda (ee entry c)
-    (add-char ee entry c)
-    entry))
+    (cond
+      [(for/or ([p (in-list (current-expression-editor-parentheses))])
+         (or (eqv? c (string-ref (symbol->immutable-string (car p)) 0))
+             (let ([s (symbol->immutable-string (cadr p))])
+               (eqv? c (string-ref s (sub1 (string-length s)))))))
+       (ee-insert-paren ee entry c)]
+      [else
+       (add-char ee entry c)
+       entry])))
 
 (define ee-command-repeat
   (lambda (ee entry c)
@@ -829,23 +839,29 @@
           (beep "mark not set")))
     entry))
 
-(define ee-forward-sexp
+(define (make-ee-move-sexp get-pos)
   (lambda (ee entry c)
-    (let ([pos (find-next-sexp-forward ee entry
-                 (entry-row entry) (entry-col entry) #f)])
+    (let ([pos (get-pos ee entry (entry-row entry) (entry-col entry))])
       (if pos
           (goto ee entry pos)
-          (beep "end of s-expression not found")))
+          (beep "target s-expression not found")))
     entry))
 
 (define ee-backward-sexp
-  (lambda (ee entry c)
-    (let ([pos (find-next-sexp-backward ee entry
-                 (entry-row entry) (entry-col entry))])
-      (if pos
-          (goto ee entry pos)
-          (beep "start of s-expression not found")))
-    entry))
+  (make-ee-move-sexp (lambda (ee entry row col)
+                       (find-next-sexp-backward ee entry row col))))
+
+(define ee-forward-sexp
+  (make-ee-move-sexp (lambda (ee entry row col)
+                       (find-next-sexp-forward ee entry row col #t))))
+
+(define ee-upward-sexp
+  (make-ee-move-sexp (lambda (ee entry row col)
+                       (find-next-sexp-upward ee entry row col))))
+
+(define ee-downward-sexp
+  (make-ee-move-sexp (lambda (ee entry row col)
+                       (find-next-sexp-downward ee entry row col))))
 
 (define ee-forward-word
   (lambda (ee entry c)
@@ -1040,6 +1056,9 @@
   (ebk "\\eB"     ee-backward-word)                   ; Esc-B
   (ebk "\\e^B"    ee-backward-sexp)                   ; Esc-^B
 
+  (ebk "\\e^U"    ee-upward-sexp)                     ; Esc-^U
+  (ebk "\\e^D"    ee-downward-sexp)                   ; Esc-^D
+
   (ebk "^X^X"     ee-exchange-point-and-mark)         ; ^X^X
   (ebk "^X["      ee-backward-page)                   ; ^X[
   (ebk "^X]"      ee-forward-page)                    ; ^X]
@@ -1063,10 +1082,6 @@
   (ebk "\\e<"     ee-beginning-of-entry)              ; Esc-<
   (ebk "\\e>"     ee-end-of-entry)                    ; Esc->      ; [[
   (ebk "\\e]"     ee-goto-matching-delimiter)         ; Esc-]
-  (ebk #\(        ee-insert-paren)                    ; (
-  (ebk #\)        ee-insert-paren)                    ; )
-  (ebk #\[        ee-insert-paren)                    ; [
-  (ebk #\]        ee-insert-paren)                    ; ]
   (ebk "^]"       ee-flash-matching-delimiter)        ; ^]
 
  ; destructive functions
@@ -1107,7 +1122,7 @@
   (ebk "\\eN"     ee-history-fwd-contains)            ; Esc-N
 
  ; misc
-  (ebk "\\e^U"   ee-command-repeat)                   ; Esc-^U
+  ;(ebk "\\e^U"   ee-command-repeat)                   ; Esc-^U
   (ebk "^Z"      ee-suspend-process)                  ; ^Z
 )
 

@@ -1,12 +1,14 @@
 #lang racket/base
 (require racket/fixnum
+         racket/symbol
          "port.rkt"
          "public.rkt"
          "screen.rkt"
          "pos.rkt"
          "assert.rkt"
          "param.rkt"
-         "token.rkt")
+         "token.rkt"
+         "object.rkt")
 
 ;; See "../expeditor.rkt"
 
@@ -39,6 +41,8 @@
          find-matching-delimiter
          find-next-sexp-backward
          find-next-sexp-forward
+         find-next-sexp-upward
+         find-next-sexp-downward
          find-next-word
          find-previous-word
          first-line?
@@ -73,6 +77,8 @@
 (define rpchar #\))
 (define lbchar #\[)
 (define rbchar #\])
+(define lcchar #\{)
+(define rcchar #\})
 
 ;;; eestate holds the state of the expression editor.
 
@@ -198,6 +204,21 @@
                (fprintf op "~a~a" sep str)
                (loop (fx+ i 1) "\n")]))))
       (get-output-string op))))
+
+(define (editor-object e row col)
+  (define s (entry->string e))
+  (values (new-object s)
+          (let loop ([offset 0] [row row])
+            (cond
+              [(fxzero? row) (+ offset col)]
+              [(= offset (string-length s)) offset]
+              [(eqv? #\newline (string-ref s offset))
+               (loop (fx+ offset 1) (fx- row 1))]
+              [else
+               (loop (fx+ offset 1) row)]))
+          (lambda (dest-offset)
+            (and dest-offset
+                 (index->pos s dest-offset 0 0)))))
 
 (define (echo-entry ee entry tp)
   (write-string (eestate-prompt ee) tp)
@@ -1011,33 +1032,44 @@
          (move-cursor-right ncols))])))
 
 (define (correct&flash-matching-delimiter ee entry)
-  (define (expected left) (if (eqv? left lbchar) rbchar rpchar))
+  (define (expected left)
+    (for/or ([p (in-list (current-expression-editor-parentheses))])
+      (define l (symbol->immutable-string (car p)))
+      (and (= (string-length l) 1)
+           (eqv? left (string-ref l 0))
+           (let ([r (symbol->immutable-string (cadr p))])
+             (and (= (string-length r) 1)
+                  (string-ref r 0))))))
   (move-left ee entry 1) ; move over delim
   (let ([lns (entry-lns entry)])
     (let* ([row (entry-row entry)]
            [col (entry-col entry)]
            [str (lns->str lns row)]
            [c (string-ref str col)])
-      (if (or (char=? c lpchar) (char=? c lbchar))
-          ; don't correct close delimiter when inserting open delimiter
-          ; since doing so often leads to surprising results
-          (when (ee-flash-parens)
-            (cond
-              [(find-matching-delim-forward ee entry row col #f) =>
-                                                                 (lambda (mpos) (flash ee entry mpos))]))
-          (cond
-            [(find-matching-delim-backward ee entry row col
-                                           (ee-auto-paren-balance)) =>
-             (lambda (mpos)
-               (let ([cexp (expected
-                            (string-ref
-                             (lns->str lns (pos-row mpos))
-                             (pos-col mpos)))])
-                 (unless (eqv? c cexp)
-                   (string-set! str col cexp)
-                   (ee-write-char cexp)
-                   (move-cursor-left 1)))
-               (when (ee-flash-parens) (flash ee entry mpos)))]))))
+      (cond
+        [(and (for/or ([p (in-list (current-expression-editor-parentheses))])
+                (define l (symbol->immutable-string (car p)))
+                (define r (symbol->immutable-string (cadr p)))
+                (and (= (string-length l) 1)
+                     (= (string-length r) 1)
+                     (eqv? c (string-ref r 0))))
+              (find-matching-delim-backward ee entry row col
+                                            (ee-auto-paren-balance)))
+         => (lambda (mpos)
+              (let ([cexp (expected
+                           (string-ref
+                            (lns->str lns (pos-row mpos))
+                            (pos-col mpos)))])
+                (unless (eqv? c cexp)
+                  (string-set! str col cexp)
+                  (ee-write-char cexp)
+                  (move-cursor-left 1)))
+              (when (ee-flash-parens) (flash ee entry mpos)))]
+        [else
+         (when (ee-flash-parens)
+           (cond
+             [(find-matching-delim-forward ee entry row col #f)
+              => (lambda (mpos) (flash ee entry mpos))]))])))
   (move-right ee entry 1))
 
 (define (find-matching-delimiter ee entry)
@@ -1076,9 +1108,7 @@
 
 (define (find-matching-delim-forward ee entry row col lax?)
   (let ([lns (entry-lns entry)])
-    ; should be sitting on left paren or bracket
-    (assert* (or (char=? (lns->char lns row col) lpchar)
-                 (char=? (lns->char lns row col) lbchar)))
+    ; should be sitting on left paren or bracket...
     ; 1. create string representing current entry starting at col, row
     ; 2. search forward until matching delimiter, eof, or error
     ; 3. if matching delimiter found, convert string index to pos
@@ -1099,63 +1129,110 @@
               [else (loop stack new-state)])))))))
 
 (define (find-next-sexp-backward ee entry row col)
-  (let* ([s (entry->string entry #:up-to-row row #:up-to-col col)]
-         [ip (open-input-string/count s)])
-    (with-handlers ([exn:fail? (lambda (exn) #f)])
-      (let loop ([stack '()] [last-start 0] [state #f])
-        (let-values ([(type value start end new-state) (read-token ip state)])
-          (case type
-            [(eof) (and last-start (index->pos s last-start 0 0))]
-            [(box quote)
-             (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
-                 (loop stack #f new-state)
-                 (loop (cons (cons 'qubx start) stack) #f new-state))]
-            [(opener)
-             (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
-                 (loop (cons (cons (opener->closer value) (cdar stack)) (cdr stack)) #f new-state)
-                 (loop (cons (cons (opener->closer value) start) stack) #f new-state))]
-            [(closer)
-             (if (and (not (null? stack)) (eq? (caar stack) value))
-                 (loop (cdr stack) (cdar stack) new-state)
-                 (loop '() #f new-state))]
-            [else
-             ;; 'qubx it meant to be a quote, unquote, box prefix, etc.,
-             ;; which are not currently recognized; a language-specific
-             ;; navigation function should take care of that
-             (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
-                 (loop (cdr stack) (cdar stack) new-state)
-                 (loop stack start new-state))]))))))
+  (define-values (obj offset offset->pos) (editor-object entry row col))
+  (define new-offset ((current-expression-editor-grouper) obj offset 0 'backward))
+  (cond
+    [(eq? new-offset #t)
+     (let* ([s (entry->string entry #:up-to-row row #:up-to-col col)]
+            [ip (open-input-string/count s)])
+       (with-handlers ([exn:fail? (lambda (exn) #f)])
+         (let loop ([stack '()] [last-start 0] [state #f])
+           (let-values ([(type value start end new-state) (read-token ip state)])
+             (case type
+               [(eof) (and last-start (index->pos s last-start 0 0))]
+               [(box quote)
+                (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
+                    (loop stack #f new-state)
+                    (loop (cons (cons 'qubx start) stack) #f new-state))]
+               [(opener)
+                (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
+                    (loop (cons (cons (opener->closer value) (cdar stack)) (cdr stack)) #f new-state)
+                    (loop (cons (cons (opener->closer value) start) stack) #f new-state))]
+               [(closer)
+                (if (and (not (null? stack)) (eq? (caar stack) value))
+                    (loop (cdr stack) (cdar stack) new-state)
+                    (loop '() #f new-state))]
+               [else
+                ;; 'qubx it meant to be a quote, unquote, box prefix, etc.,
+                ;; which are not currently recognized; a language-specific
+                ;; navigation function should take care of that
+                (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
+                    (loop (cdr stack) (cdar stack) new-state)
+                    (loop stack start new-state))])))))]
+    [else (offset->pos new-offset)]))
 
 (define (find-next-sexp-forward ee entry row col ignore-whitespace?)
   ; ordinarily stops at first s-expression if it follows whitespace (or
   ; comments), but always moves to second if ignore-whitespace? is true
-  (let* ([s (entry->string entry #:from-row row #:from-col col)]
-         [ip (open-input-string/count s)])
-    (define (skip start state)
-      (index->pos s
-                  (with-handlers ([exn:fail? (lambda (exn) start)])
-                    (let-values ([(type value start end new-state) (read-token ip state)])
-                      start))
-                  row col))
-    (with-handlers ([exn:fail? (lambda (exn) #f)])
-      (let loop ([stack '()] [first? #t] [ignore? #f] [state #f])
-        (let-values ([(type value start end new-state) (read-token ip state)])
-          (if (and first? (not ignore-whitespace?) (fx> start 0))
-              (and (not ignore?) (index->pos s start row col))
-              (case type
-                [(eof fasl) #f]
-                [(opener) (loop (cons (opener->closer value) stack) #f ignore? new-state)]
-                [(closer)
-                 (and (not (null? stack))
-                      (eq? (car stack) value)
-                      (let ([stack (cdr stack)])
-                        (if (null? stack)
-                            (and (not ignore?) (skip start new-state))
-                            (loop stack #f ignore? new-state))))]
-                [else
-                 (if (null? stack)
-                     (and (not ignore?) (skip start new-state))
-                     (loop stack #f ignore? new-state))])))))))
+  (define-values (obj offset offset->pos) (editor-object entry row col))
+  (define new-offset ((current-expression-editor-grouper) obj offset 0 'forward))
+  (cond
+    [(eq? new-offset #t)
+     (let* ([s (entry->string entry #:from-row row #:from-col col)]
+            [ip (open-input-string/count s)])
+       (define (skip start state)
+         (index->pos s
+                     (with-handlers ([exn:fail? (lambda (exn) start)])
+                       (let loop ([state state])
+                         (let-values ([(type value start end new-state) (read-token ip state)])
+                           (if (eq? type 'white-space)
+                               (loop new-state)
+                               start))))
+                     row col))
+       (with-handlers ([exn:fail? (lambda (exn) #f)])
+         (let loop ([stack '()] [first? #t] [ignore? #f] [state #f])
+           (let-values ([(type value start end new-state) (read-token ip state)])
+             (if (and first? (not ignore-whitespace?) (fx> start 0))
+                 (and (not ignore?) (index->pos s start row col))
+                 (case type
+                   [(eof fasl) #f]
+                   [(opener) (loop (cons (opener->closer value) stack) #f ignore? new-state)]
+                   [(closer)
+                    (and (not (null? stack))
+                         (eq? (car stack) value)
+                         (let ([stack (cdr stack)])
+                           (if (null? stack)
+                               (and (not ignore?) (skip start new-state))
+                               (loop stack #f ignore? new-state))))]
+                   [else
+                    (if (null? stack)
+                        (and (not ignore?) (skip start new-state))
+                        (loop stack #f ignore? new-state))]))))))]
+    [else (offset->pos new-offset)]))
+
+(define (find-next-sexp-upward ee entry row col)
+  (define-values (obj offset offset->pos) (editor-object entry row col))
+  (define new-offset ((current-expression-editor-grouper) obj offset 0 'up))
+  (cond
+    [(eq? new-offset #t)
+     (let* ([s (entry->string entry #:up-to-row row #:up-to-col col)]
+            [ip (open-input-string/count s)])
+       (let loop ([stack '()] [state #f])
+         (let-values ([(type value start end new-state) (read-token ip state)])
+           (case type
+             [(eof)
+              (and (pair? stack)
+                   (index->pos s (car stack) 0 0))]
+             [(opener) (loop (cons start stack) new-state)]
+             [(closer) (loop (if (pair? stack) (cdr stack) null) new-state)]
+             [else (loop stack new-state)]))))]
+    [else (offset->pos new-offset)]))
+
+(define (find-next-sexp-downward ee entry row col)
+  (define-values (obj offset offset->pos) (editor-object entry row col))
+  (define new-offset ((current-expression-editor-grouper) obj offset 0 'down))
+  (cond
+    [(eq? new-offset #t)
+     (let* ([s (entry->string entry #:from-row row #:from-col col)]
+            [ip (open-input-string/count s)])
+       (with-handlers ([exn:fail? (lambda (exn) #f)])
+         (let loop ([state #f])
+           (let-values ([(type value start end new-state) (read-token ip state)])
+             (case type
+               [(eof closer) #f]
+               [(opener) (index->pos s end row col)]
+               [else (loop new-state)])))))]
+    [else (offset->pos new-offset)]))
 
 (define-public (find-next-word find-previous-word)
   (define separator?

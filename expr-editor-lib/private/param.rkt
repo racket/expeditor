@@ -20,6 +20,7 @@
          current-expression-editor-post-skipper
          current-expression-editor-ready-checker
          current-expression-editor-completer
+         current-expression-editor-grouper
          current-expression-editor-history)
 
 (define (fxnonnegative? v)
@@ -134,3 +135,6 @@
                     (values (parameterize ([current-namespace (make-base-namespace)])
                               (namespace-mapped-symbols))
                             (ee-common-identifiers)))))
+
+(define current-expression-editor-grouper
+  (make-parameter (lambda (obj start limit direction) #t)))
