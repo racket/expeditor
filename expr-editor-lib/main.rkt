@@ -17,7 +17,8 @@
          current-expression-editor-reader
          current-expression-editor-post-skipper
          current-expression-editor-parentheses
-         current-expression-editor-grouper)
+         current-expression-editor-grouper
+         current-expression-editor-indenter)
 
 ;;; Based on:
 ;;;
@@ -544,7 +545,7 @@
        #f]
       [else
        (insert-strings-before ee entry '("" ""))
-       (when (should-auto-indent? ee) (indent ee entry))
+       (when (should-auto-indent? ee) (indent ee entry #t))
        entry])))
 
 (define ee-newline
@@ -553,7 +554,7 @@
       [(null-entry? entry) entry]
       [else
        (insert-strings-before ee entry '("" ""))
-       (when (should-auto-indent? ee) (indent ee entry))
+       (when (should-auto-indent? ee) (indent ee entry #t))
        entry])))
 
 (define ee-accept
@@ -585,7 +586,7 @@
   (lambda (ee entry c)
     (let ([point (entry-point entry)])
       (insert-strings-before ee entry '("" ""))
-      (when (should-auto-indent? ee) (indent ee entry))
+      (when (should-auto-indent? ee) (indent ee entry #t))
       (goto ee entry point)
       entry)))
 

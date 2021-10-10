@@ -21,7 +21,8 @@
          current-expression-editor-ready-checker
          current-expression-editor-completer
          current-expression-editor-grouper
-         current-expression-editor-history)
+         current-expression-editor-history
+         current-expression-editor-indenter)
 
 (define (fxnonnegative? v)
   (and (fixnum? v)
@@ -138,3 +139,7 @@
 
 (define current-expression-editor-grouper
   (make-parameter (lambda (obj start limit direction) #t)))
+
+
+(define current-expression-editor-indenter
+  (make-parameter (lambda (obj start auto?) #t)))

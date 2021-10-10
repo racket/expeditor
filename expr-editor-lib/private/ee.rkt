@@ -1285,6 +1285,7 @@
 
 (define-public (indent indent-all)
   (define (calc-indent ee entry row)
+    
     (define (find-unmatched-left-delim row)
       (let* ([ln (list-ref (entry-lns entry) row)]
              [s (ln-str ln)])
@@ -1356,22 +1357,40 @@
                      (make-string n #\space)
                      (lns->str lns row))))]))
 
-  (define (indent ee entry)
-    (let* ([row (entry-row entry)]
-           [lns (entry-lns entry)]
-           [n (fx- (calc-indent ee entry row) (current-indent lns row))])
-      (unless (fx= n 0)
-        (let* ([ln (list-ref lns row)]
-               [nsr (ln-nsr ln)]
-               [eoe? (end-of-entry? ee entry)])
-          (indent-row! ee entry row n)
-          (move-bol ee entry)
-          (let ([just-row? (fx= (ln-nsr ln) nsr)])
-            (display-rest/goto ee entry just-row?
-                               ; avoid clear-eol/eos if inserting and either at end of entry or
-                               ; rewriting just the current row
-                               (or (fx< n 0) (and (not eoe?) (not just-row?)))
-                               row (fxmax (fx+ (entry-col entry) n) 0)))))))
+  (define (indent ee entry [auto? #f])
+    (define-values (obj offset offset->pos) (editor-object entry
+                                                           (entry-row entry)
+                                                           (entry-col entry)))
+    (define amt ((current-expression-editor-indenter) obj offset auto?))
+    (define row (entry-row entry))
+    (define lns (entry-lns entry))
+    (define ln (list-ref lns row))
+    (define nsr (ln-nsr ln))
+    (define (finish n)
+      (indent-row! ee entry row n)
+      (move-bol ee entry)
+      (let ([just-row? (fx= (ln-nsr ln) nsr)])
+        (define eoe? (end-of-entry? ee entry))
+        (display-rest/goto ee entry just-row?
+                           ; avoid clear-eol/eos if inserting and either at end of entry or
+                           ; rewriting just the current row
+                           (or (fx< n 0) (and (not eoe?) (not just-row?)))
+                           row (fxmax (fx+ (entry-col entry) n) 0))))
+    (cond
+      [(not amt)
+       (let* ([n (fx- (calc-indent ee entry row) (current-indent lns row))])
+         (unless (fx= n 0)
+           (finish n)))]
+      [else
+       (define row (entry-row entry))
+       (define cur-amt (current-indent lns row))
+       (cond
+         [(equal? amt '(0 "")) (void)]
+         [(number? amt)
+          (finish (- amt cur-amt))]
+         [else
+          (finish (- (string-length (cadr amt))
+                     (car amt)))])]))
 
   (define (indent-all ee entry)
     (let* ([lns (entry-lns entry)]
