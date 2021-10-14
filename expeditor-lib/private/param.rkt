@@ -142,4 +142,4 @@
 
 
 (define current-expeditor-indenter
-  (make-parameter (lambda (obj start auto?) #t)))
+  (make-parameter (lambda (obj start auto?) #f)))

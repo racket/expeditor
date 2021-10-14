@@ -12,6 +12,10 @@
          "private/token.rkt")
 
 (provide call-with-expeditor
+         expeditor-open
+         expeditor-close
+         expeditor-read
+
          current-expeditor-lexer
          current-expeditor-ready-checker
          current-expeditor-reader
@@ -1127,7 +1131,7 @@
   (ebk "^Z"      ee-suspend-process)                  ; ^Z
 )
 
-(define (open-expeditor history)
+(define (expeditor-open history)
   (cond
     [(init-screen)
      (define ee (make-eestate))
@@ -1135,7 +1139,7 @@
      ee]
     [else #f]))
 
-(define (close-expeditor ee)
+(define (expeditor-close ee)
   (ee-get-history ee))
 
 (define (expeditor-read ee)
@@ -1148,7 +1152,7 @@
         (if (cond
               [(eestate? ee) #t]
               [(eq? ee 'failed) #f]
-              [(open-expeditor (current-expeditor-history))
+              [(expeditor-open (current-expeditor-history))
                => (lambda (new-ee)
                     (set! ee new-ee)
                     #t)]
@@ -1161,20 +1165,20 @@
                              (expeditor-prompt-and-read 1))))
                    list)])
         (when (eestate? ee)
-          (current-expeditor-history (close-expeditor ee)))
+          (current-expeditor-history (expeditor-close ee)))
         (apply values val*)))))
 
 (module+ main
   (current-namespace (make-base-namespace))
   (current-expeditor-lexer (dynamic-require 'syntax-color/racket-lexer 'racket-lexer))
   (current-expeditor-reader (lambda (in) (read-syntax (object-name in) in)))
-  (define ee (open-expeditor (map bytes->string/utf-8
+  (define ee (expeditor-open (map bytes->string/utf-8
                                   (get-preference 'readline-input-history (lambda () null)))))
   (current-prompt-read (lambda () (expeditor-read ee)))
   (exit-handler
    (let ([old (exit-handler)])
      (lambda (v)
-       (define history (close-expeditor ee))
+       (define history (expeditor-close ee))
        (put-preferences '(readline-input-history) (list (map string->bytes/utf-8 history)))
        (old v))))
   (read-eval-print-loop))
