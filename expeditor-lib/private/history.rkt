@@ -3,7 +3,7 @@
          "param.rkt"
          "ee.rkt")
 
-;; See "../expeditor.rkt"
+;; See "../main.rkt"
 
 (provide history-search-bwd history-search-fwd
          update-history! history-fast-forward! entry-modified?

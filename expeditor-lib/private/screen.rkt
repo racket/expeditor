@@ -1,8 +1,8 @@
 #lang racket/base
 (require racket/fixnum
-         "host.rkt")
+         "terminal.rkt")
 
-;; See "../expeditor.rkt"
+;; See "../main.rkt"
 
 ; screen initialization and manipulation routines
 

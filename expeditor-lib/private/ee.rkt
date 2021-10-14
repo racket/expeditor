@@ -10,7 +10,7 @@
          "token.rkt"
          "object.rkt")
 
-;; See "../expeditor.rkt"
+;; See "../main.rkt"
 
 (provide string->entry
          entry->string
@@ -1033,7 +1033,7 @@
 
 (define (correct&flash-matching-delimiter ee entry)
   (define (expected left)
-    (for/or ([p (in-list (current-expression-editor-parentheses))])
+    (for/or ([p (in-list (current-expeditor-parentheses))])
       (define l (symbol->immutable-string (car p)))
       (and (= (string-length l) 1)
            (eqv? left (string-ref l 0))
@@ -1047,7 +1047,7 @@
            [str (lns->str lns row)]
            [c (string-ref str col)])
       (cond
-        [(and (for/or ([p (in-list (current-expression-editor-parentheses))])
+        [(and (for/or ([p (in-list (current-expeditor-parentheses))])
                 (define l (symbol->immutable-string (car p)))
                 (define r (symbol->immutable-string (cadr p)))
                 (and (= (string-length l) 1)
@@ -1130,7 +1130,7 @@
 
 (define (find-next-sexp-backward ee entry row col)
   (define-values (obj offset offset->pos) (editor-object entry row col))
-  (define new-offset ((current-expression-editor-grouper) obj offset 0 'backward))
+  (define new-offset ((current-expeditor-grouper) obj offset 0 'backward))
   (cond
     [(eq? new-offset #t)
      (let* ([s (entry->string entry #:up-to-row row #:up-to-col col)]
@@ -1165,7 +1165,7 @@
   ; ordinarily stops at first s-expression if it follows whitespace (or
   ; comments), but always moves to second if ignore-whitespace? is true
   (define-values (obj offset offset->pos) (editor-object entry row col))
-  (define new-offset ((current-expression-editor-grouper) obj offset 0 'forward))
+  (define new-offset ((current-expeditor-grouper) obj offset 0 'forward))
   (cond
     [(eq? new-offset #t)
      (let* ([s (entry->string entry #:from-row row #:from-col col)]
@@ -1202,7 +1202,7 @@
 
 (define (find-next-sexp-upward ee entry row col)
   (define-values (obj offset offset->pos) (editor-object entry row col))
-  (define new-offset ((current-expression-editor-grouper) obj offset 0 'up))
+  (define new-offset ((current-expeditor-grouper) obj offset 0 'up))
   (cond
     [(eq? new-offset #t)
      (let* ([s (entry->string entry #:up-to-row row #:up-to-col col)]
@@ -1220,7 +1220,7 @@
 
 (define (find-next-sexp-downward ee entry row col)
   (define-values (obj offset offset->pos) (editor-object entry row col))
-  (define new-offset ((current-expression-editor-grouper) obj offset 0 'down))
+  (define new-offset ((current-expeditor-grouper) obj offset 0 'down))
   (cond
     [(eq? new-offset #t)
      (let* ([s (entry->string entry #:from-row row #:from-col col)]
@@ -1361,7 +1361,7 @@
     (define-values (obj offset offset->pos) (editor-object entry
                                                            (entry-row entry)
                                                            (entry-col entry)))
-    (define amt ((current-expression-editor-indenter) obj offset auto?))
+    (define amt ((current-expeditor-indenter) obj offset auto?))
     (define row (entry-row entry))
     (define lns (entry-lns entry))
     (define ln (list-ref lns row))
@@ -1485,7 +1485,7 @@
                    [(and (fx= (fx+ c end) (entry-col entry))
                          (eq? type 'symbol))
                     (let ([prefix (symbol->string value)])
-                      (let-values ([(syms common) ((current-expression-editor-completer) prefix)])
+                      (let-values ([(syms common) ((current-expeditor-completer) prefix)])
                         (values prefix
                                 (sort (foldl (lambda (x suffix*)
                                                (cond

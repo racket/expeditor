@@ -1,7 +1,7 @@
 #lang racket/base
 (require racket/fixnum)
 
-;; See "../expeditor.rkt"
+;; See "../main.rkt"
 
 ;;; pos is used for two different but related purposes: for row, col
 ;;; positions and for row, physical-line positions.  see the comment

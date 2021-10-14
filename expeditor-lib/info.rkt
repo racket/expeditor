@@ -1,5 +1,5 @@
 #lang info
 
-(define collection "expr-editor")
+(define collection "expeditor")
 
 (define deps '("base"))

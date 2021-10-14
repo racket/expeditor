@@ -6,7 +6,7 @@
 
 (define (read-token ip state)
   (define-values (lexeme orig-type paren start end backup new-state)
-    (let ([lex (current-expression-editor-lexer)])
+    (let ([lex (current-expeditor-lexer)])
       (if (procedure-arity-includes? lex 3)
           (lex ip 0 state)
           (let-values ([(lexeme type paren start end) (lex ip)])
@@ -25,7 +25,7 @@
   (case type
     [(parenthesis)
      (define new-type
-       (for/or ([p (in-list (current-expression-editor-parentheses))])
+       (for/or ([p (in-list (current-expeditor-parentheses))])
          (cond
            [(eq? paren (car p)) 'opener]
            [(eq? paren (cadr p)) 'closer]
@@ -44,6 +44,6 @@
          (values type lexeme))]))
 
 (define (opener->closer paren)
-  (for/or ([p (in-list (current-expression-editor-parentheses))])
+  (for/or ([p (in-list (current-expeditor-parentheses))])
     (and (eq? paren (car p))
          (cadr p))))

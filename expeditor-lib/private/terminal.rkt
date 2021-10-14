@@ -1,7 +1,7 @@
 #lang racket/base
 (require ffi/unsafe/vm)
 
-;; See "../expeditor.rkt"
+;; See "../main.rkt"
 
 (provide init-term
          $ee-read-char

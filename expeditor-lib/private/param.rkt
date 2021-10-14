@@ -1,7 +1,7 @@
 #lang racket/base
 (require racket/fixnum)
 
-;; See "../expeditor.rkt"
+;; See "../main.rkt"
 
 ;;; parameters
 
@@ -14,15 +14,15 @@
          ee-noisy
          ee-standard-indent
          ee-history-limit
-         current-expression-editor-lexer
-         current-expression-editor-reader
-         current-expression-editor-parentheses
-         current-expression-editor-post-skipper
-         current-expression-editor-ready-checker
-         current-expression-editor-completer
-         current-expression-editor-grouper
-         current-expression-editor-history
-         current-expression-editor-indenter)
+         current-expeditor-lexer
+         current-expeditor-reader
+         current-expeditor-parentheses
+         current-expeditor-post-skipper
+         current-expeditor-ready-checker
+         current-expeditor-completer
+         current-expeditor-grouper
+         current-expeditor-history
+         current-expeditor-indenter)
 
 (define (fxnonnegative? v)
   (and (fixnum? v)
@@ -83,7 +83,7 @@
         (error 'ee-history-length "~s is not a nonnegative fixnum" x))
       x)))
 
-(define current-expression-editor-lexer
+(define current-expeditor-lexer
   (make-parameter (lambda (ip)
                     (define start (add1 (file-position ip)))
                     (define ch (read-char ip))
@@ -98,18 +98,18 @@
                   (lambda (p)
                     p)))
 
-(define current-expression-editor-parentheses
+(define current-expeditor-parentheses
   (make-parameter '((|(| |)|)
                     (|[| |]|)
                     (|{| |}|))))
 
-(define current-expression-editor-reader
+(define current-expeditor-reader
   (make-parameter (lambda (ip)
                     (read ip))
                   (lambda (p)
                     p)))
 
-(define current-expression-editor-post-skipper
+(define current-expeditor-post-skipper
   (make-parameter (lambda (ip)
                     (let loop ([n 0])
                       (define ch (read-char ip))
@@ -120,7 +120,7 @@
                   (lambda (p)
                     p)))
 
-(define current-expression-editor-ready-checker
+(define current-expeditor-ready-checker
   (make-parameter (lambda (ip)
                     (with-handlers ([exn:fail:read? (lambda (exn) #f)])
                       (read ip)
@@ -128,18 +128,18 @@
                   (lambda (p)
                     p)))
 
-(define current-expression-editor-history
+(define current-expeditor-history
   (make-parameter null))
 
-(define current-expression-editor-completer
+(define current-expeditor-completer
   (make-parameter (lambda (prefix)
                     (values (parameterize ([current-namespace (make-base-namespace)])
                               (namespace-mapped-symbols))
                             (ee-common-identifiers)))))
 
-(define current-expression-editor-grouper
+(define current-expeditor-grouper
   (make-parameter (lambda (obj start limit direction) #t)))
 
 
-(define current-expression-editor-indenter
+(define current-expeditor-indenter
   (make-parameter (lambda (obj start auto?) #t)))

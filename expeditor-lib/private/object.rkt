@@ -10,7 +10,7 @@
 (struct token (type paren start end))
 
 (define (lex-all ip)
-  (define lex (current-expression-editor-lexer))
+  (define lex (current-expeditor-lexer))
   (let loop ([state #f])
     (define-values (lexeme type paren start end backup new-state)
       (if (procedure-arity-includes? lex 3)
@@ -100,7 +100,7 @@
            (case category
              [(parenthesis)
               (define sym (string->symbol (get-text s e)))
-              (let paren-loop ([parens (current-expression-editor-parentheses)])
+              (let paren-loop ([parens (current-expeditor-parentheses)])
                 (cond
                   [(null? parens) #f]
                   [(eq? sym (caar parens))
@@ -128,7 +128,7 @@
            (case category
              [(parenthesis)
               (define sym (string->symbol (get-text s e)))
-              (let paren-loop ([parens (current-expression-editor-parentheses)])
+              (let paren-loop ([parens (current-expeditor-parentheses)])
                 (cond
                   [(null? parens) #f]
                   [(eq? sym (caar parens))
