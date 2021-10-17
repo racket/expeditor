@@ -17,6 +17,7 @@
          string->lines
          (struct-out eestate) make-eestate
          ; primtiive and derived record accessors and mutators: no ee argument
+         entry?
          entry-col
          entry-nsr
          entry-row

@@ -2,6 +2,7 @@
 (require racket/fixnum
          racket/file
          racket/symbol
+         racket/interaction-info
          "private/port.rkt"
          "private/public.rkt"
          "private/screen.rkt"
@@ -15,6 +16,8 @@
          expeditor-open
          expeditor-close
          expeditor-read
+
+         expeditor-configure
 
          current-expeditor-lexer
          current-expeditor-ready-checker
@@ -81,7 +84,7 @@
     (when (ee-noisy) (bell))))
 
 (define-public (ee-read)
-  (define (accept ee entry kf)
+  (define (accept ee entry kf #:newline? [newline? #t])
     (let* ([str (entry->string entry)]
            [sip (open-input-string/count str)])
       (define (fail exn)
@@ -114,7 +117,8 @@
       (define (succeed result)
         (move-eoe ee entry)
         (no-raw-mode)
-        (ee-write-char #\newline)
+        (when newline? ; skip a newline on EOF for consistency with plain input
+          (ee-write-char #\newline))
         (ee-flush)
         (update-history! ee entry)
         ;; skip close delimiters, whitespace, and comments?
@@ -135,7 +139,7 @@
           (dispatch ee entry table))
         (let ([c (ee-read-char)])
           (let ([x (if (eof-object? c)
-                       (lambda (ee entry c) #f)
+                       (lambda (ee entry c) eof)
                        (hash-ref table c (lambda () ee-insert-self)))])
             (cond
               [(procedure? x)
@@ -144,21 +148,22 @@
                  (if (= n 0)
                      (dispatch ee entry base-dispatch-table)
                      (let loop ([n n] [entry entry])
+                       (define result (x ee entry c))
                        (cond
-                         [(x ee entry c) =>
-                          (lambda (entry)
-                            (if (> n 1)
-                                (loop (- n 1) entry)
-                                (begin
-                                  (set-eestate-rt-last-op! ee
-                                    (cons (cdr (eestate-rt-last-op ee))
-                                          (current-milliseconds)))
-                                  (set-eestate-last-op! ee x)
-                                  (dispatch ee entry base-dispatch-table))))]
+                         [(entry? result)
+                          (define entry result)
+                          (if (> n 1)
+                              (loop (- n 1) entry)
+                              (begin
+                                (set-eestate-rt-last-op! ee (cons (cdr (eestate-rt-last-op ee))
+                                                                  (current-milliseconds)))
+                                (set-eestate-last-op! ee x)
+                                (dispatch ee entry base-dispatch-table)))]
                          [else
                           (accept ee entry
-                            (lambda ()
-                              (dispatch ee entry base-dispatch-table)))]))))]
+                                  #:newline? (not (eof-object? result))
+                                  (lambda ()
+                                    (dispatch ee entry base-dispatch-table)))]))))]
               [(dispatch-table? x) (dispatch ee entry x)]
               [else
                (set-eestate-repeat-count! ee 1)
@@ -197,9 +202,9 @@
   (if (and (terminal-port? (current-input-port))
            (terminal-port? (current-output-port)))
       (begin
-       ; fresh-line doesn't take into account output written to the console
-       ; through some other port or external means, so this might not emit a
-       ; fresh line when one is needed, but the user can always redisplay
+        ; fresh-line doesn't take into account output written to the console
+        ; through some other port or external means, so this might not emit a
+        ; fresh line when one is needed, but the user can always redisplay
         (fresh-line (current-output-port))
         (flush-output (current-output-port))
         (set-eestate-prompt! ee
@@ -212,7 +217,10 @@
         (ee-read ee))
       (default-prompt-and-read n)))
 
-(define (fresh-line op) (void))
+(define (fresh-line op)
+  (flush-output op)
+  (define-values (line col pos) (port-next-location op))
+  (unless (or (not col) (eq? col 0)) (newline op)))
 
 (define (default-prompt-and-read n)
   ((current-prompt-read)))
@@ -776,7 +784,7 @@
 (define ee-eof
   (lambda (ee entry c)
     (cond
-      [(null-entry? entry) #f]
+      [(null-entry? entry) eof]
       [else (beep "eof ignored except in null entry")])))
 
 (define ee-delete-char
@@ -793,7 +801,7 @@
       [(null-entry? entry)
        (if (eq? (eestate-last-op ee) ee-eof/delete-char)
            entry     ; assume attempt to continue deleting chars
-           #f)]
+           eof)]
       [(end-of-line? ee entry)
        (unless (last-line? ee entry) (join-rows ee entry))
        entry]
@@ -1168,7 +1176,50 @@
           (current-expeditor-history (expeditor-close ee)))
         (apply values val*)))))
 
+(define (expeditor-configure)
+  (define info (let ([vec (current-interaction-info)])
+                 (if vec
+                     ((dynamic-require (vector-ref vec 0)
+                                       (vector-ref vec 1))
+                      (vector-ref vec 2))
+                     (lambda (key def-val) def-val))))
+  (current-expeditor-reader
+   (lambda (in) ((current-read-interaction) (object-name in) in)))
+  (let ([lexer (or (info 'color-lexer #f)
+                   (and (collection-file-path "racket-lexer.rkt" "syntax-color")
+                        (dynamic-require 'syntax-color/racket-lexer 'racket-lexer)))])
+    (current-expeditor-lexer lexer))
+  (let ([pred (info 'drracket:submit-predicate #f)])
+    (when pred
+      (current-expeditor-ready-checker (lambda (in)
+                                         (pred in #t)))))
+  (let ([parens (info 'drracket:paren-matches #f)])
+    (when parens
+      (current-expeditor-parentheses parens)))
+  (let ([group (info 'drracket:grouping-position #f)])
+    (when group
+      (current-expeditor-grouper group)))
+  (let ([indent (info 'drracket:indentation #f)]
+        [indent-range (info 'drracket:range-indentation #f)])
+    (when (or indent indent-range)
+      (current-expeditor-indenter
+       (lambda (t pos auto?)
+         (cond
+           [(and auto? indent)
+            (indent t pos)]
+           [else
+            (define r (and indent-range
+                           (indent-range t pos pos)))
+            (if r
+                (if (null? r)
+                    (list 0 "")
+                    (car r))
+                (and indent
+                     (indent t pos)))]))))))
+
 (module+ main
+  (port-count-lines! (current-input-port))
+  (port-count-lines! (current-output-port))
   (current-namespace (make-base-namespace))
   (current-expeditor-lexer (dynamic-require 'syntax-color/racket-lexer 'racket-lexer))
   (current-expeditor-reader (lambda (in) (read-syntax (object-name in) in)))
