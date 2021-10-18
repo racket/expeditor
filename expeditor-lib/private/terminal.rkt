@@ -1,5 +1,6 @@
 #lang racket/base
-(require ffi/unsafe/vm)
+(require ffi/unsafe/vm
+         '#%terminal)
 
 ;; See "../main.rkt"
 
@@ -28,35 +29,32 @@
          $carriage-return
          line-feed)
 
-(define-syntax-rule (foreign-procedure name (arg ...) result)
-  (vm-eval '(foreign-procedure name (arg ...) result)))
+(define init-term terminal-init)
+(define $ee-read-char/blocking terminal-read-char)
+(define $ee-write-char terminal-write-char)
+(define ee-flush terminal-flush)
+(define get-screen-size terminal-get-screen-size)
+(define raw-mode (lambda () (terminal-raw-mode #t)))
+(define no-raw-mode (lambda () (terminal-raw-mode #f)))
+(define post-output-mode (lambda () (terminal-postoutput-mode #t)))
+(define no-post-output-mode (lambda () (terminal-postoutput-mode #f)))
+(define enter-am-mode (lambda () (terminal-automargin-mode #t)))
+(define exit-am-mode (lambda () (terminal-automargin-mode #f)))
+(define nanosleep terminal-nanosleep)
+(define pause terminal-pause)
+(define get-clipboard terminal-get-clipboard)
 
-(define init-term (foreign-procedure "(cs)ee_init_term" () boolean))
-(define $ee-read-char/blocking (foreign-procedure "(cs)ee_read_char" (boolean) scheme-object))
-(define $ee-write-char (foreign-procedure "(cs)ee_write_char" (wchar_t) void))
-(define ee-flush (foreign-procedure "(cs)ee_flush" () void))
-(define get-screen-size (foreign-procedure "(cs)ee_get_screen_size" () scheme-object))
-(define raw-mode (foreign-procedure "(cs)ee_raw" () void))
-(define no-raw-mode (foreign-procedure "(cs)ee_noraw" () void))
-(define post-output-mode (foreign-procedure "(cs)ee_postoutput" () void))
-(define no-post-output-mode (foreign-procedure "(cs)ee_nopostoutput" () void))
-(define enter-am-mode (foreign-procedure "(cs)ee_enter_am_mode" () void))
-(define exit-am-mode (foreign-procedure "(cs)ee_exit_am_mode" () void))
-(define nanosleep (foreign-procedure "(cs)ee_nanosleep" (unsigned-32 unsigned-32) void))
-(define pause (foreign-procedure "(cs)ee_pause" () void))
-(define get-clipboard (foreign-procedure "(cs)ee_get_clipboard" () scheme-object))
-
-(define move-cursor-up (foreign-procedure "(cs)ee_up" (integer-32) void))
-(define move-cursor-down (foreign-procedure "(cs)ee_down" (integer-32) void))
-(define $move-cursor-left (foreign-procedure "(cs)ee_left" (integer-32) void))
-(define $move-cursor-right (foreign-procedure "(cs)ee_right" (integer-32) void))
-(define clear-eol (foreign-procedure "(cs)ee_clr_eol" () void))
-(define clear-eos (foreign-procedure "(cs)ee_clr_eos" () void))
-(define $clear-screen (foreign-procedure "(cs)ee_clear_screen" () void))
-(define scroll-reverse (foreign-procedure "(cs)ee_scroll_reverse" (integer-32) void))
-(define bell (foreign-procedure "(cs)ee_bell" () void))
-(define $carriage-return (foreign-procedure "(cs)ee_carriage_return" () void))
-(define line-feed (foreign-procedure "(cs)ee_line_feed" () void))
+(define move-cursor-up (lambda (amt) (terminal-move-cursor 'up amt)))
+(define move-cursor-down (lambda (amt) (terminal-move-cursor 'down amt)))
+(define $move-cursor-left (lambda (amt) (terminal-move-cursor 'left amt)))
+(define $move-cursor-right (lambda (amt) (terminal-move-cursor 'right amt)))
+(define clear-eol (lambda () (terminal-clear 'eol)))
+(define clear-eos (lambda () (terminal-clear 'eos)))
+(define $clear-screen (lambda () (terminal-clear 'screen)))
+(define scroll-reverse terminal-scroll-reverse)
+(define bell terminal-bell)
+(define $carriage-return terminal-carriage-return)
+(define line-feed terminal-line-feed)
 
 (define ($ee-read-char block?)
   (cond
