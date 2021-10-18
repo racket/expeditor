@@ -1,9 +1,233 @@
 #lang scribble/manual
+@(require racket/list)
+
+@(define (onekey s) (regexp-replace #rx"\\^" (regexp-replace #rx"-" s ";") "Ctl-"))
+@(define (binding-table . keys) (apply itemlist  keys))
+@(define (key* keys prod . content)
+   (item (if (string? keys)
+             (onekey keys)
+             (add-between (map onekey keys) " or "))
+         " --- "
+         content))
+@(define-syntax-rule (key keys code . content) (key* 'keys 'code . content))
+
+@(define (subsection* s) (subsection #:style '(unnumbered) s))
 
 @title{Expeditor: Terminal Expression Editor}
 
-The @filepath{expeditor} collection supports multi-line expression
-editing with indentation and completion support within a terminal.
-It's meant to use the same language-adapting APIs as DrRacket.
+@defmodule[expeditor]
 
-Stay tuned for documentation.
+The expeditor (the @bold{exp}ression @bold{editor}) supports
+multi-line expression editing with indentation and completion support
+within a terminal. It's based on Chez Scheme's expression editor, but
+adaptable to Racket languages using the same language-adapting APIs as
+DrRacket. Normally, the expeditor is run automatically by
+@racketmodname[xrepl #:indirect], which is turn run by default by the
+@exec{racket} command-line executable.
+
+
+@section{Default Key Bindings}
+
+In the keybinding descriptions below, ``;`` means a key sequence, as
+opposed to keys held down at once. In a ``Ctl-'' combination, the
+letter case of the key doesn't matter (i.e., not necessarily holding
+the Shift key).
+
+@subsection*{Evaluation, Indentation, and Completion}
+
+@binding-table[
+
+  @key[("Return" "^M") ee-newline/accept]{Reads and evaluates the
+       current entry, if it is complete, and otherwise inserts a
+       newline and auto-indents. The notion of ``complete'' depends on
+       a language, but typically includes requirements like no
+       unbalanced parentheses.}
+
+  @key[("Esc-Return" "Esc-^M") ee-accept]{Reads and evaluates the
+       current entry, even if it is not otherwise recognized as
+       complete.}
+       
+  @key["^J" ee-newline]{Inserts a newline and indents.}
+       
+  @key["^O" ee-open-line]{Creates a new line for input, similar to a
+       non-accepting @onekey{Return}, but does not move the cursor to
+       the new line or indent.}
+
+  @key["Tab" ee-id-completion/indent]{Either indents or completes,
+       depending on the text before the cursor. If no text is present
+       before the cursor on the same line, then the line is indented
+       or cycled to the next possible indentation. If the cursor is
+       after an identifier, it's completed or a list of possible
+       completions is shown. Completion depends on the language, but
+       it is typically drawn from the set of available top-level
+       bindings.}
+
+  @key["^R" ee-next-id-completion]{Steps through the next possible
+       completion when there are multiple possible completions.}
+
+  @key["Esc-Tab" ee-indent]{Indents the current line or cycles though
+       possible indentations. The cursor is moved to just after the
+       indentation before the rest of the line content.}
+
+  @key[("Esc-q" "Esc-Q" "Esc-^Q") ee-indent-all]{Reindents the full editor
+       region.}
+
+]
+
+@subsection*{Navigation}
+
+@binding-table[
+
+  @key[("Left" "^B") ee-backward-char]{Moves the cursor back
+       one character.}
+       
+  @key[("Right" "^F") ee-forward-char]{Moves the cursor forward
+       one character.}
+       
+  @key[("Up" "^P") ee-previous-line]{Moves the cursor up to the
+       previous line---unless the cursor is at the start of the
+       editor-region, in which case replaces the editor region with the
+       previous history entry.}
+
+  @key[("Down" "^N") ee-next-line]{Moves the cursor down to the next
+       line---unless the cursor is at the end of the editor region, in
+       which case replaces the editor region with the next history
+       entry.}
+       
+  @key[("Home" "^A") ee-beginning-of-line]{Moves the cursor to the
+       start of the current line.}
+       
+  @key[("End" "^E") ee-end-of-line]{Moves the cursor to the
+       end of the current line.}
+
+  @key[("PageUp" "^X[") ee-backward-page]{Moves the cursor up to the
+       previous page.}
+       
+  @key[("PageDown" "^X]") ee-backward-page]{Moves the cursor down to the
+       next page.}
+
+  @key["Esc-<" ee-beginning-of-entry]{Moves the cursor to the
+       start of the editor region.}
+       
+  @key["Esc->" ee-end-of-entry]{Moves the cursor to the
+       end of the editor region.}
+
+  @key[("Esc-f" "Esc-F") ee-forward-word]{Moves the cursor forward
+       one whitespace-delimited word.}
+       
+  @key[("Esc-b" "Esc-B") ee-backward-word]{Moves the cursor backward
+       one whitespace-delimited word.}
+
+  @key["Esc-]" ee-goto-matching-delimiter]{Moves the cursor to the
+       opener or closer opposite the one under the cursor.}
+       
+  @key["^]" ee-flash-matching-delimiter]{Flashes the cursor on the
+       opener or closer opposite the one under the cursor.}
+
+  @key[("Esc-^F") ee-forward-sexp]{Moves the cursor forward
+       one expression, where the definition of ``expression'' is
+       language-specific.}
+       
+  @key[("Esc-^B") ee-backward-sexp]{Moves the cursor backward
+       one language-specific expression.}
+
+  @key[("Esc-^U") ee-upward-sexp]{Moves the cursor upward/outward
+       one language-specific expression.}
+       
+  @key[("Esc-^D") ee-downward-sexp]{Moves the cursor downward/inward
+       one language-specific expression.}
+
+  @key["^X-^X" ee-exchange-point-and-mark]{Moves the cursor to the
+       location of the @tech{mark} while setting the @tech{mark} to
+       the cursor's current position.}
+
+]
+
+@subsection*{History}
+
+@binding-table[
+
+  @key[("Esc-Up" "Esc-^P") ee-history-bwd]{Replaces the editor region with the
+       previous history entry.}
+
+  @key[("Esc-Down" "Esc-^N") ee-history-fwd]{Replaces the editor region with the
+       next history entry.}
+  
+  @key[("Esc-p") ee-history-bwd-prefix]{Replaces the editor region
+       with the previous history entry that starts the same as the current
+       editor content.}
+
+  @key[("Esc-P") ee-history-bwd-contains]{Replaces the editor region
+       with the previous history entry that includes the same as the
+       current editor content.}
+       
+  @key[("Esc-n") ee-history-fwd-prefix]{Replaces the editor region
+       with the next history entry that starts the same as the current
+       editor content.}
+
+  @key[("Esc-N") ee-history-fwd-contains]{Replaces the editor region
+       with the next history entry that includes the same as the
+       current editor content.}
+
+]
+
+@subsection*{Deletion and Clipboard}
+
+@binding-table[
+
+  @key[("Backspace" "^H") ee-backward-delete-char]{Deletes the previous
+       character, if any.}
+
+  @key["^D" ee-eof/delete-char]{Deletes the next character, if
+       any---unless the editor region is empty, in which case returns
+       an end-of-file as the input.}
+
+  @key["Delete" ee-delete-char]{Deletes the next character, if
+       any.}
+
+  @key["^U" ee-delete-line]{Deletes the content of the current line,
+       no matter where the cursor is within the line.}
+  
+  @key[("^K" "Esc-k") ee-delete-to-eol]{Deletes the content of the
+       current line following the cursor, or merges the next line with
+       the current one if the cursor is at the end of the line.}
+  
+  @key[("^G") ee-delete-entry]{Deletes the full content of the editor
+       region.}
+  
+  @key[("^C") ee-reset-entry]{Deletes the full content of the editor
+       region, and also moves to the end of the history.}
+
+  @key[("Esc-Delete" "Esc-^K") ee-delete-sexp]{Deletes one expression
+       after the cursor, where the definition of ``expression'' is
+       language-specific.}
+
+  @key[("Esc-Backspace" "Esc-^H") ee-backward-delete-sexp]{Deletes one
+       expression before the cursor.}
+
+  @key[("^@" "^^") ee-set-mark]{Set the @tech{mark} to be the same
+       position as the cursor. The @deftech{mark} is a kind of second
+       cursor, but invisible, that is used by various editing
+       operations.}
+
+  @key["^W" ee-delete-between-point-and-mark]{Deletes content between
+       the cursor and the @tech{mark}.}
+
+  @key["^Y" ee-yank-kill-buffer]{Inserts content previously deleted,
+       where multiple consecutive deletions accumulate to one set of
+       content to insert.}
+
+  @key["^V" ee-yank-selection]{Inserts the content of the system
+       clipboard.}
+
+]
+
+@subsection*{Process Control}
+
+@binding-table[
+
+  @key["^L" ee-redisplay]{Refreshes the editor region's display.}
+
+  @key["^Z" ee-suspend-process]{Suspends the current process.}
+
+]

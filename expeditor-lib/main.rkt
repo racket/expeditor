@@ -1038,9 +1038,11 @@
 
 (let ([ebk ee-bind-key])
  ; newline oper<ations
-  (ebk #\return   ee-newline/accept)                  ; Enter, ^M
-  (ebk "^J"       ee-accept)                          ; ^J
+  (ebk #\return   ee-newline/accept)                  ; Return, ^M
+  (ebk "^J"       ee-newline)                         ; ^J
   (ebk "^O"       ee-open-line)                       ; ^O
+
+  (ebk "\\e^M"    ee-accept)                          ; Esc-^M
 
  ; indenting operations
   (ebk "\\e\t"    ee-indent)                          ; Esc-Tab
@@ -1121,8 +1123,8 @@
   (ebk "^L"       ee-redisplay)                       ; ^L
 
  ; string macros
-  (ebk "\\ed"     (ee-string-macro "(define "))       ; Esc-d   ; )
-  (ebk "\\el"     (ee-string-macro "(lambda "))       ; Esc-l   ; )
+ ; (ebk "\\ed"     (ee-string-macro "(define "))       ; Esc-d   ; )
+ ; (ebk "\\el"     (ee-string-macro "(lambda "))       ; Esc-l   ; )
 
  ; history keys
   (ebk "\\e^P"    ee-history-bwd)                     ; Esc-^P
