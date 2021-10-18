@@ -1151,6 +1151,10 @@
                    (and (eq? (car stack) value) (loop (cdr stack) new-state)))]
               [else (loop stack new-state)])))))))
 
+(define (reader-prefix? type value)
+  (and (memq type '(constant other))
+       (member value '("'" "`" "," ",@" "#'" "#`" "#," "#,@"))))
+
 (define (find-next-exp-backward ee entry row col)
   (define-values (obj offset offset->pos) (editor-object entry row col))
   (define new-offset ((current-expeditor-grouper) obj offset 0 'backward))
@@ -1163,10 +1167,6 @@
            (let-values ([(type value start end new-state) (read-token ip state)])
              (case type
                [(eof) (and last-start (index->pos s last-start 0 0))]
-               [(box quote)
-                (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
-                    (loop stack #f new-state)
-                    (loop (cons (cons 'qubx start) stack) #f new-state))]
                [(opener)
                 (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
                     (loop (cons (cons (opener->closer value) (cdar stack)) (cdr stack)) #f new-state)
@@ -1176,12 +1176,16 @@
                     (loop (cdr stack) (cdar stack) new-state)
                     (loop '() #f new-state))]
                [else
-                ;; 'qubx it meant to be a quote, unquote, box prefix, etc.,
-                ;; which are not currently recognized; a language-specific
-                ;; navigation function should take care of that
-                (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
-                    (loop (cdr stack) (cdar stack) new-state)
-                    (loop stack start new-state))])))))]
+                ;; 'qubx it meant to be a quote, unquote, box prefix, etc.
+                (cond
+                  [(and (not (null? stack)) (eq? (caar stack) 'qubx))
+                   (loop (cdr stack) (cdar stack) new-state)]
+                  [(reader-prefix? type value)
+                   (if (and (not (null? stack)) (eq? (caar stack) 'qubx))
+                       (loop stack #f new-state)
+                       (loop (cons (cons 'qubx start) stack) #f new-state))]
+                  [else
+                   (loop stack start new-state)])])))))]
     [else (offset->pos new-offset)]))
 
 (define (find-next-exp-forward ee entry row col [ignore-whitespace? #f])
@@ -1218,9 +1222,13 @@
                                (and (not ignore?) (skip start new-state))
                                (loop stack #f ignore? new-state))))]
                    [else
-                    (if (null? stack)
-                        (and (not ignore?) (skip start new-state))
-                        (loop stack #f ignore? new-state))]))))))]
+                    (cond
+                      [(reader-prefix? type value)
+                       (loop stack #f ignore? new-state)]
+                      [(null? stack)
+                       (and (not ignore?) (skip start new-state))]
+                      [else
+                       (loop stack #f ignore? new-state)])]))))))]
     [else (offset->pos new-offset)]))
 
 (define (find-next-exp-upward ee entry row col)
