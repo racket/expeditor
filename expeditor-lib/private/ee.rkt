@@ -40,12 +40,14 @@
          echo-entry
          end-of-line?
          find-matching-delimiter
-         find-next-sexp-backward
-         find-next-sexp-forward
-         find-next-sexp-upward
-         find-next-sexp-downward
+         find-next-exp-backward
+         find-next-exp-forward
+         find-next-exp-upward
+         find-next-exp-downward
          find-next-word
          find-previous-word
+         find-whitespace-start
+         find-whitespace-end
          first-line?
          flash
          goto
@@ -64,6 +66,7 @@
          move-left
          move-right
          move-up
+         move-forward
          only-whitespace-left?
          page-down
          page-up
@@ -718,6 +721,25 @@
     (assert* (fx<= new-col (string-length (lns->str (entry-lns entry) (entry-row entry)))))
     (goto-forward ee entry (entry-row entry) new-col)))
 
+(define (move-forward ee entry n)
+  (define dest
+    (let loop ([n n] [row (entry-row entry)] [col (entry-col entry)])
+      (cond
+        [(zero? n) (make-pos row col)]
+        [else
+         (define len (- (string-length (lns->str (entry-lns entry) row))
+                        col))
+         (cond
+           [(n . > . len)
+            (loop (- n len 1) (add1 row) 0)]
+           [else
+            (make-pos row (+ col n))])])))
+  (move-down ee entry (- (pos-row dest) (entry-row entry)))
+  (define right (- (pos-col dest) (entry-col entry)))
+  (if (right . < . 0)
+      (move-left ee entry (- right))
+      (move-right ee entry right)))
+
 (define (page-down ee entry)
   (let* ([last-row (fx- (length (entry-lns entry)) 1)]
          [row (entry-row entry)]
@@ -1129,7 +1151,7 @@
                    (and (eq? (car stack) value) (loop (cdr stack) new-state)))]
               [else (loop stack new-state)])))))))
 
-(define (find-next-sexp-backward ee entry row col)
+(define (find-next-exp-backward ee entry row col)
   (define-values (obj offset offset->pos) (editor-object entry row col))
   (define new-offset ((current-expeditor-grouper) obj offset 0 'backward))
   (cond
@@ -1162,7 +1184,7 @@
                     (loop stack start new-state))])))))]
     [else (offset->pos new-offset)]))
 
-(define (find-next-sexp-forward ee entry row col ignore-whitespace?)
+(define (find-next-exp-forward ee entry row col [ignore-whitespace? #f])
   ; ordinarily stops at first s-expression if it follows whitespace (or
   ; comments), but always moves to second if ignore-whitespace? is true
   (define-values (obj offset offset->pos) (editor-object entry row col))
@@ -1201,7 +1223,7 @@
                         (loop stack #f ignore? new-state))]))))))]
     [else (offset->pos new-offset)]))
 
-(define (find-next-sexp-upward ee entry row col)
+(define (find-next-exp-upward ee entry row col)
   (define-values (obj offset offset->pos) (editor-object entry row col))
   (define new-offset ((current-expeditor-grouper) obj offset 0 'up))
   (cond
@@ -1219,7 +1241,7 @@
              [else (loop stack new-state)]))))]
     [else (offset->pos new-offset)]))
 
-(define (find-next-sexp-downward ee entry row col)
+(define (find-next-exp-downward ee entry row col)
   (define-values (obj offset offset->pos) (editor-object entry row col))
   (define new-offset ((current-expeditor-grouper) obj offset 0 'down))
   (cond
@@ -1283,6 +1305,38 @@
                     (separator? (lns->char lns row (fx1- col))))
                 (make-pos row col)]
                [else (loop (fx1- col))]))])))))
+
+(define-public (find-whitespace-start find-whitespace-end)
+  (define (find-whitespace-end ee entry row col)
+    ; always returns a position
+    (let ([lns (entry-lns entry)])
+      ; skip past whitespace
+      (let loop ([row row] [col col])
+        (cond
+          [(fx= col (string-length (lns->str lns row)))
+           (if (fx= row (fx1- (length lns)))
+               (make-pos row col)
+               (loop (fx1+ row) 0))]
+          [(char-whitespace? (lns->char lns row col))
+           (loop row (fx1+ col))]
+          [else (make-pos row col)]))))
+
+  (define (find-whitespace-start ee entry row col)
+    ; always returns a position
+    (let ([lns (entry-lns entry)])
+      ; skip past separators space (starts at char left of current)
+      (let loop ([row row] [col col])
+        (cond
+          [(fx= col 0)
+           (if (fx= row 0)
+               (make-pos row col)
+               (loop
+                (fx1- row)
+                (string-length (lns->str lns (fx1- row)))))]
+          [(char-whitespace? (lns->char lns row (fx1- col)))
+           (loop row (fx1- col))]
+          [else (make-pos row col)])))))
+           
 
 (define-public (indent indent-all)
   (define (calc-indent ee entry row)

@@ -172,7 +172,7 @@ holding the Shift key).
 
 ]
 
-@subsection*{Deletion and Clipboard}
+@subsection*{Deletion, Insertion, and Transposition}
 
 @binding-table[
 
@@ -220,6 +220,12 @@ holding the Shift key).
 
   @key["^V" ee-yank-selection]{Inserts the content of the system
        clipboard.}
+
+  @key["^T" ee-transpose-word]{Transposes space-delimited words to the
+       left and right of the cursor.}
+
+  @key["Esc-^T" ee-transpose-exp]{Transposes language-specific
+       expressions to the left and right of the cursor.}
 
 ]
 

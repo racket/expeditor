@@ -395,7 +395,8 @@
                (eqv? c (string-ref s (sub1 (string-length s)))))))
        (ee-insert-paren ee entry c)]
       [else
-       (add-char ee entry c)
+       (unless ((char->integer c) . < . 32) ; don't insert control characters
+         (add-char ee entry c))
        entry])))
 
 (define ee-command-repeat
@@ -730,25 +731,59 @@
     (history-fast-forward! ee)
     (ee-delete-entry ee entry c)))
 
-(define ee-delete-sexp
+(define-public (ee-transpose-word ee-transpose-exp)
+  (define (make-transpose find-next-backward find-next-forward)
+    (lambda (ee entry c)
+      (let* ([pre-end-pos (find-whitespace-start ee entry
+                                                 (entry-row entry) (entry-col entry))]
+             [pre-pos (find-next-backward ee entry
+                                          (pos-row pre-end-pos) (pos-col pre-end-pos))]
+             [post-pos (find-whitespace-end ee entry
+                                            (entry-row entry) (entry-col entry))]
+             [post-end-pos (find-next-forward ee entry
+                                              (pos-row post-pos) (pos-col post-pos))])
+        (cond
+          [(and pre-pos post-end-pos)
+           (define delta (string-length (entry->string entry
+                                                       #:from-row (pos-row pre-end-pos)
+                                                       #:from-col (pos-col pre-end-pos)
+                                                       #:up-to-row (pos-row post-pos)
+                                                       #:up-to-col (pos-col post-pos))))
+           (goto ee entry post-pos)
+           (define post (delete-forward ee entry (pos-row post-end-pos) (pos-col post-end-pos)))
+           (goto ee entry pre-pos)
+           (define pre (delete-forward ee entry (pos-row pre-end-pos) (pos-col pre-end-pos)))
+           (insert-strings-before ee entry post)
+           (move-forward ee entry delta)
+           (insert-strings-before ee entry pre)]
+          [else
+           (beep "start or end not found")]))
+      entry))
+  
+  (define ee-transpose-word
+    (make-transpose find-previous-word find-next-word))
+  (define ee-transpose-exp
+    (make-transpose find-next-exp-backward find-next-exp-forward)))
+
+(define ee-delete-exp
   (lambda (ee entry c)
-    (let ([pos (find-next-sexp-forward ee entry
+    (let ([pos (find-next-exp-forward ee entry
                  (entry-row entry) (entry-col entry) #f)])
       (if pos
           (set-eestate-killbuf! ee
             (delete-forward ee entry (pos-row pos) (pos-col pos)))
-          (beep "end of s-expression not found")))
+          (beep "end of expression not found")))
     entry))
 
-(define ee-backward-delete-sexp
+(define ee-backward-delete-exp
   (lambda (ee entry c)
     (let ([row (entry-row entry)] [col (entry-col entry)])
-      (let ([pos (find-next-sexp-backward ee entry row col)])
+      (let ([pos (find-next-exp-backward ee entry row col)])
         (if pos
             (begin
               (goto ee entry pos)
               (set-eestate-killbuf! ee (delete-forward ee entry row col)))
-          (beep "start of s-expression not found"))))
+          (beep "start of expression not found"))))
     entry))
 
 (define ee-redisplay
@@ -852,29 +887,29 @@
           (beep "mark not set")))
     entry))
 
-(define (make-ee-move-sexp get-pos)
+(define (make-ee-move-exp get-pos)
   (lambda (ee entry c)
     (let ([pos (get-pos ee entry (entry-row entry) (entry-col entry))])
       (if pos
           (goto ee entry pos)
-          (beep "target s-expression not found")))
+          (beep "target expression not found")))
     entry))
 
-(define ee-backward-sexp
-  (make-ee-move-sexp (lambda (ee entry row col)
-                       (find-next-sexp-backward ee entry row col))))
+(define ee-backward-exp
+  (make-ee-move-exp (lambda (ee entry row col)
+                       (find-next-exp-backward ee entry row col))))
 
-(define ee-forward-sexp
-  (make-ee-move-sexp (lambda (ee entry row col)
-                       (find-next-sexp-forward ee entry row col #t))))
+(define ee-forward-exp
+  (make-ee-move-exp (lambda (ee entry row col)
+                       (find-next-exp-forward ee entry row col #t))))
 
-(define ee-upward-sexp
-  (make-ee-move-sexp (lambda (ee entry row col)
-                       (find-next-sexp-upward ee entry row col))))
+(define ee-upward-exp
+  (make-ee-move-exp (lambda (ee entry row col)
+                       (find-next-exp-upward ee entry row col))))
 
-(define ee-downward-sexp
-  (make-ee-move-sexp (lambda (ee entry row col)
-                       (find-next-sexp-downward ee entry row col))))
+(define ee-downward-exp
+  (make-ee-move-exp (lambda (ee entry row col)
+                       (find-next-exp-downward ee entry row col))))
 
 (define ee-forward-word
   (lambda (ee entry c)
@@ -1067,13 +1102,13 @@
 
   (ebk "\\ef"     ee-forward-word)                    ; Esc-f
   (ebk "\\eF"     ee-forward-word)                    ; Esc-F
-  (ebk "\\e^F"    ee-forward-sexp)                    ; Esc-^F
+  (ebk "\\e^F"    ee-forward-exp)                     ; Esc-^F
   (ebk "\\eb"     ee-backward-word)                   ; Esc-b
   (ebk "\\eB"     ee-backward-word)                   ; Esc-B
-  (ebk "\\e^B"    ee-backward-sexp)                   ; Esc-^B
+  (ebk "\\e^B"    ee-backward-exp)                    ; Esc-^B
 
-  (ebk "\\e^U"    ee-upward-sexp)                     ; Esc-^U
-  (ebk "\\e^D"    ee-downward-sexp)                   ; Esc-^D
+  (ebk "\\e^U"    ee-upward-exp)                      ; Esc-^U
+  (ebk "\\e^D"    ee-downward-exp)                    ; Esc-^D
 
   (ebk "^X^X"     ee-exchange-point-and-mark)         ; ^X^X
   (ebk "^X["      ee-backward-page)                   ; ^X[
@@ -1100,6 +1135,9 @@
   (ebk "\\e]"     ee-goto-matching-delimiter)         ; Esc-]
   (ebk "^]"       ee-flash-matching-delimiter)        ; ^]
 
+  (ebk "^T"       ee-transpose-word)                  ; ^T
+  (ebk "\\e^T"    ee-transpose-exp)                   ; Esc-^T
+
  ; destructive functions
   (ebk "^U"       ee-delete-line)                     ; ^U
   (ebk "^K"       ee-delete-to-eol)                   ; ^K
@@ -1107,10 +1145,10 @@
   (ebk "^W"       ee-delete-between-point-and-mark)   ; ^W
   (ebk "^G"       ee-delete-entry)                    ; ^G
   (ebk "^C"       ee-reset-entry)                     ; ^C
-  (ebk "\\e^K"    ee-delete-sexp)                     ; Esc-^K
-  (ebk "\\e\\e[3~" ee-delete-sexp)                    ; Esc-Delete
-  (ebk "\\e\177"  ee-backward-delete-sexp)            ; Esc-Backspace
-  (ebk "\\e^H"    ee-backward-delete-sexp)            ; Esc-^H
+  (ebk "\\e^K"    ee-delete-exp)                      ; Esc-^K
+  (ebk "\\e\\e[3~" ee-delete-exp)                     ; Esc-Delete
+  (ebk "\\e\177"  ee-backward-delete-exp)             ; Esc-Backspace
+  (ebk "\\e^H"    ee-backward-delete-exp)             ; Esc-^H
   (ebk "^V"       ee-yank-selection)                  ; ^V
   (ebk "^Y"       ee-yank-kill-buffer)                ; ^Y
   (ebk "^D"       ee-eof/delete-char)                 ; ^D
