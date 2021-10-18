@@ -1102,10 +1102,14 @@
 
   (ebk "\\ef"     ee-forward-word)                    ; Esc-f
   (ebk "\\eF"     ee-forward-word)                    ; Esc-F
+  (ebk "\\e[1;5C" ee-forward-word)                    ; Ctl-Right
   (ebk "\\e^F"    ee-forward-exp)                     ; Esc-^F
+  (ebk "\\e\\e[C" ee-forward-exp)                     ; Esc-Ctl-Right
   (ebk "\\eb"     ee-backward-word)                   ; Esc-b
   (ebk "\\eB"     ee-backward-word)                   ; Esc-B
+  (ebk "\\e[1;5D" ee-backward-word)                   ; Ctl-Left
   (ebk "\\e^B"    ee-backward-exp)                    ; Esc-^B
+  (ebk "\\e\\e[D" ee-backward-exp)                    ; Esc-Ctl-Left
 
   (ebk "\\e^U"    ee-upward-exp)                      ; Esc-^U
   (ebk "\\e^D"    ee-downward-exp)                    ; Esc-^D

@@ -113,11 +113,11 @@ holding the Shift key).
   @key["Esc->" ee-end-of-entry]{Moves the cursor to the
        end of the editor region.}
 
-  @key[("Esc-f" "Esc-F") ee-forward-word]{Moves the cursor forward
-       one whitespace-delimited word.}
+  @key[("Esc-f" "Esc-F" "^Right") ee-forward-word]{Moves the cursor
+       forward one whitespace-delimited word.}
        
-  @key[("Esc-b" "Esc-B") ee-backward-word]{Moves the cursor backward
-       one whitespace-delimited word.}
+  @key[("Esc-b" "Esc-B" "^Left") ee-backward-word]{Moves the cursor
+       backward one whitespace-delimited word.}
 
   @key["Esc-]" ee-goto-matching-delimiter]{Moves the cursor to the
        opener or closer opposite the one under the cursor.}
@@ -125,17 +125,17 @@ holding the Shift key).
   @key["^]" ee-flash-matching-delimiter]{Flashes the cursor on the
        opener or closer opposite the one under the cursor.}
 
-  @key[("Esc-^F") ee-forward-sexp]{Moves the cursor forward
+  @key[("Esc-^F" "Esc-^Right") ee-forward-exp]{Moves the cursor forward
        one expression, where the definition of ``expression'' is
        language-specific.}
        
-  @key[("Esc-^B") ee-backward-sexp]{Moves the cursor backward
+  @key[("Esc-^B" "Esc-^Left") ee-backward-exp]{Moves the cursor backward
        one language-specific expression.}
 
-  @key[("Esc-^U") ee-upward-sexp]{Moves the cursor upward/outward
+  @key[("Esc-^U") ee-upward-exp]{Moves the cursor upward/outward
        one language-specific expression.}
        
-  @key[("Esc-^D") ee-downward-sexp]{Moves the cursor downward/inward
+  @key[("Esc-^D") ee-downward-exp]{Moves the cursor downward/inward
        one language-specific expression.}
 
   @key["^X-^X" ee-exchange-point-and-mark]{Moves the cursor to the
@@ -199,11 +199,11 @@ holding the Shift key).
   @key[("^C") ee-reset-entry]{Deletes the full content of the editor
        region, and also moves to the end of the history.}
 
-  @key[("Esc-Delete" "Esc-^K") ee-delete-sexp]{Deletes one expression
+  @key[("Esc-Delete" "Esc-^K") ee-delete-exp]{Deletes one expression
        after the cursor, where the definition of ``expression'' is
        language-specific.}
 
-  @key[("Esc-Backspace" "Esc-^H") ee-backward-delete-sexp]{Deletes one
+  @key[("Esc-Backspace" "Esc-^H") ee-backward-delete-exp]{Deletes one
        expression before the cursor.}
 
   @key[("^@" "^^") ee-set-mark]{Set the @tech{mark} to be the same
