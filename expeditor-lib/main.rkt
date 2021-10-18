@@ -1042,7 +1042,8 @@
   (ebk "^J"       ee-newline)                         ; ^J
   (ebk "^O"       ee-open-line)                       ; ^O
 
-  (ebk "\\e^M"    ee-accept)                          ; Esc-^M
+  (ebk "\\e^M"    ee-newline)                         ; Esc-^M
+  (ebk "\\e^J"    ee-accept)                          ; Esc-^J
 
  ; indenting operations
   (ebk "\\e\t"    ee-indent)                          ; Esc-Tab

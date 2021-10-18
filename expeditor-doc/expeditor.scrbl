@@ -37,18 +37,17 @@ the Shift key).
 
 @binding-table[
 
-  @key[("Return" "^M") ee-newline/accept]{Reads and evaluates the
+  @key[("Return") ee-newline/accept]{Reads and evaluates the
        current entry, if it is complete, and otherwise inserts a
        newline and auto-indents. The notion of ``complete'' depends on
        a language, but typically includes requirements like no
        unbalanced parentheses.}
 
-  @key[("Esc-Return" "Esc-^M") ee-accept]{Reads and evaluates the
-       current entry, even if it is not otherwise recognized as
-       complete.}
+  @key[("Esc-Return" "^J") ee-newline]{Inserts a newline and indents.}
        
-  @key["^J" ee-newline]{Inserts a newline and indents.}
-       
+  @key[("Esc-^J") ee-accept]{Reads and evaluates the current entry,
+       even if it is not otherwise recognized as complete.}
+
   @key["^O" ee-open-line]{Creates a new line for input, similar to a
        non-accepting @onekey{Return}, but does not move the cursor to
        the new line or indent.}
