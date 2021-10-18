@@ -133,8 +133,7 @@
 
 (define current-expeditor-completer
   (make-parameter (lambda (prefix)
-                    (values (parameterize ([current-namespace (make-base-namespace)])
-                              (namespace-mapped-symbols))
+                    (values (namespace-mapped-symbols)
                             (ee-common-identifiers)))))
 
 (define current-expeditor-grouper
