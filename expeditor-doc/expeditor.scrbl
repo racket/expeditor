@@ -1,7 +1,7 @@
 #lang scribble/manual
 @(require racket/list)
 
-@(define (onekey s) (regexp-replace #rx"\\^" (regexp-replace #rx"-" s ";") "Ctl-"))
+@(define (onekey s) (regexp-replace #rx"\\^" (regexp-replace #rx"Esc-" s "Meta-") "Ctl-"))
 @(define (binding-table . keys) (apply itemlist  keys))
 @(define (key* keys prod . content)
    (item (if (string? keys)
@@ -18,20 +18,22 @@
 @defmodule[expeditor]
 
 The expeditor (the @bold{exp}ression @bold{editor}) supports
-multi-line expression editing with indentation and completion support
-within a terminal. It's based on Chez Scheme's expression editor, but
-adaptable to Racket languages using the same language-adapting APIs as
-DrRacket. Normally, the expeditor is run automatically by
-@racketmodname[xrepl #:indirect], which is turn run by default by the
-@exec{racket} command-line executable.
+multi-line editing with indentation and completion support within a
+terminal. It's based on Chez Scheme's expression editor, but can be
+adapted to Racket languages using the same hooks and APIs as DrRacket.
+Normally, the expeditor is run automatically by @racketmodname[xrepl
+#:indirect], which is turn loaded by the @exec{racket} command-line
+executable.
 
 
 @section{Default Key Bindings}
 
-In the keybinding descriptions below, ``;`` means a key sequence, as
-opposed to keys held down at once. In a ``Ctl-'' combination, the
-letter case of the key doesn't matter (i.e., not necessarily holding
-the Shift key).
+In the keybinding descriptions below, a ``Meta-'' combination can be
+typed as the Esc key (pressed then released) followed by the rest of
+the combination. A terminal will typically report a combination using
+the Alt or Option key as that Esc sequence. In a ``Ctl-'' combination,
+the letter case of the key doesn't matter (i.e., doesn't require
+holding the Shift key).
 
 @subsection*{Evaluation, Indentation, and Completion}
 
