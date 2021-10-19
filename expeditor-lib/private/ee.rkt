@@ -12,66 +12,67 @@
 
 ;; See "../main.rkt"
 
-(provide string->entry
-         entry->string
-         string->lines
-         (struct-out eestate) make-eestate
-         ; primtiive and derived record accessors and mutators: no ee argument
-         entry?
-         entry-col
-         entry-nsr
-         entry-row
-         entry-mark
-         entry-point
-         null-entry?
-         entry-mark-set!
-         entry-row-set!
-         set-entry-col!
-         ; normal entry procedures: first two arguments are ee and entry
-         add-char
-         beginning-of-line?
-         clear-entry
-         id-completions
-         correct&flash-matching-delimiter
-         yank-entry
-         delete-char
-         delete-forward
-         delete-to-eol
-         echo-entry
-         end-of-line?
-         find-matching-delimiter
-         find-next-exp-backward
-         find-next-exp-forward
-         find-next-exp-upward
-         find-next-exp-downward
-         find-next-word
-         find-previous-word
-         find-whitespace-start
-         find-whitespace-end
-         first-line?
-         flash
-         goto
-         handle-winch
-         indent
-         indent-all
-         insert-string-before
-         insert-strings-before
-         join-rows
-         last-line?
-         last-line-displayed?
-         move-bol
-         move-down
-         move-eoe
-         move-eol
-         move-left
-         move-right
-         move-up
-         move-forward
-         only-whitespace-left?
-         page-down
-         page-up
-         redisplay
-         should-auto-indent?)
+(provide
+ (protect-out string->entry
+              entry->string
+              string->lines
+              (struct-out eestate) make-eestate
+              ; primtiive and derived record accessors and mutators: no ee argument
+              entry?
+              entry-col
+              entry-nsr
+              entry-row
+              entry-mark
+              entry-point
+              null-entry?
+              entry-mark-set!
+              entry-row-set!
+              set-entry-col!
+              ; normal entry procedures: first two arguments are ee and entry
+              add-char
+              beginning-of-line?
+              clear-entry
+              id-completions
+              correct&flash-matching-delimiter
+              yank-entry
+              delete-char
+              delete-forward
+              delete-to-eol
+              echo-entry
+              end-of-line?
+              find-matching-delimiter
+              find-next-exp-backward
+              find-next-exp-forward
+              find-next-exp-upward
+              find-next-exp-downward
+              find-next-word
+              find-previous-word
+              find-whitespace-start
+              find-whitespace-end
+              first-line?
+              flash
+              goto
+              handle-winch
+              indent
+              indent-all
+              insert-string-before
+              insert-strings-before
+              join-rows
+              last-line?
+              last-line-displayed?
+              move-bol
+              move-down
+              move-eoe
+              move-eol
+              move-left
+              move-right
+              move-up
+              move-forward
+              only-whitespace-left?
+              page-down
+              page-up
+              redisplay
+              should-auto-indent?))
 
 (define (fxzero? n) (fx= n 0))
 (define (fx1- n) (fx- n 1))

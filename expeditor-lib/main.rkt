@@ -25,7 +25,9 @@
          current-expeditor-post-skipper
          current-expeditor-parentheses
          current-expeditor-grouper
-         current-expeditor-indenter)
+         current-expeditor-indenter
+
+         current-expeditor-during-read-evt)
 
 ;;; Based on:
 ;;;
@@ -1191,7 +1193,7 @@
 
 (define (expeditor-open history)
   (cond
-    [(init-screen)
+    [(init-screen (current-input-port) (current-output-port))
      (define ee (make-eestate))
      (ee-set-history! ee history)
      ee]

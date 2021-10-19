@@ -1,19 +1,24 @@
 #lang racket/base
 (require racket/fixnum
-         "terminal.rkt")
+         ffi/unsafe/port
+         "terminal.rkt"
+         "param.rkt")
 
 ;; See "../main.rkt"
 
 ; screen initialization and manipulation routines
 
-(provide init-screen raw-mode no-raw-mode
-         screen-resize! screen-rows screen-cols
-         ee-winch? ee-char-ready? ee-peek-char ee-read-char
-         ee-write-char ee-display-string ee-flush
-         move-cursor-up move-cursor-right move-cursor-left move-cursor-down
-         scroll-reverse clear-eol clear-eos clear-screen
-         carriage-return line-feed
-         bell pause get-clipboard wait)
+(provide
+ (protect-out init-screen
+              screen-resize! screen-rows screen-cols
+              ee-winch? ee-char-ready? ee-peek-char ee-read-char
+              ee-write-char ee-display-string)
+ raw-mode no-raw-mode
+ ee-flush
+ move-cursor-up move-cursor-right move-cursor-left move-cursor-down
+ scroll-reverse clear-eol clear-eos clear-screen
+ carriage-return line-feed
+ bell pause get-clipboard wait)
 
 ; screen state
 (define cols #f)
@@ -21,6 +26,7 @@
 (define cursor-col #f)
 (define the-unread-char #f)
 (define winch #f)
+(define input-port #f)
 
 (define (fx1+ n) (fx+ n 1))
 
@@ -36,17 +42,39 @@
 (define (screen-rows) rows)
 (define (screen-cols) cols)
 
-(define (init-screen)
-  (and (init-term)
+(define (init-screen in out)
+  (define in-fd (unsafe-port->file-descriptor in))
+  (define out-fd (unsafe-port->file-descriptor out))
+  (and (init-term in-fd out-fd)
        (begin
          (set! cursor-col 0)
          (set! the-unread-char #f)
          (set! winch #f)
+         (set! input-port in)
          #t)))
 
 (define (clear-screen)
   ($clear-screen)
   (set! cursor-col 0))
+
+(define ($ee-read-char in-port block?)
+  (cond
+    [block?
+     (post-output-mode)
+     (let loop ()
+       (define r (sync in-port
+                       ((current-get-interaction-evt))))
+       (unless (eq? r in-port)
+         (when (procedure? r)
+           (signal-mode)
+           (r)
+           (no-signal-mode))
+         (loop)))
+     (no-post-output-mode)
+     (or ($ee-read-char/blocking #f)
+         ($ee-read-char in-port block?))]
+    [else
+     ($ee-read-char/blocking #f)]))
 
 (define (ee-winch?)
   (and (not the-unread-char)
@@ -54,7 +82,7 @@
            (begin (set! winch #f) #t)
            (begin
              (ee-flush)
-             (let ([c ($ee-read-char #t)])
+             (let ([c ($ee-read-char input-port #t)])
                (or (eq? c #t)
                    (begin (set! the-unread-char c) #f)))))))
 
@@ -63,7 +91,7 @@
       #t
       (let f ()
         (ee-flush)
-        (let ([c ($ee-read-char #f)])
+        (let ([c ($ee-read-char input-port #f)])
           (cond
             [(eq? c #f) #f]
             [(eq? c #t) (set! winch #t) (f)]
@@ -74,7 +102,7 @@
       (let ([c the-unread-char]) (set! the-unread-char #f) c)
       (let f ()
         (ee-flush)
-        (let ([c ($ee-read-char #t)])
+        (let ([c ($ee-read-char input-port #t)])
           (if (eq? c #t)
               (begin (set! winch #t) (f))
               c)))))

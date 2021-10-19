@@ -14,6 +14,7 @@
          ee-noisy
          ee-standard-indent
          ee-history-limit
+         current-expeditor-during-read-evt
          current-expeditor-lexer
          current-expeditor-reader
          current-expeditor-parentheses
@@ -82,6 +83,13 @@
       (unless (and (fixnum? x) (fxnonnegative? x))
         (error 'ee-history-length "~s is not a nonnegative fixnum" x))
       x)))
+
+(define current-expeditor-during-read-evt
+  (make-parameter never-evt
+                  (lambda (x)
+                    (unless (evt? x)
+                      (raise-argument-error 'current-expeditor-during-read-evt "evt?" x))
+                    x)))
 
 (define current-expeditor-lexer
   (make-parameter (lambda (ip)
