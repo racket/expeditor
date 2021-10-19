@@ -712,6 +712,11 @@
           (beep "mark not set")))
     entry))
 
+(define (ee-delete-between-point-and-mark-or-backward ee entry c)
+  (if (entry-mark entry)
+      (ee-delete-between-point-and-mark ee entry c)
+      (ee-backward-delete-exp ee entry c)))
+
 (define ee-set-mark
   (lambda (ee entry c)
     (entry-mark-set! entry (entry-point entry))
@@ -1146,7 +1151,7 @@
   (ebk "^U"       ee-delete-line)                     ; ^U
   (ebk "^K"       ee-delete-to-eol)                   ; ^K
   (ebk "\\ek"     ee-delete-to-eol)                   ; Esc-k
-  (ebk "^W"       ee-delete-between-point-and-mark)   ; ^W
+  (ebk "^W"       ee-delete-between-point-and-mark-or-backward)   ; ^W
   (ebk "^G"       ee-delete-entry)                    ; ^G
   (ebk "^C"       ee-reset-entry)                     ; ^C
   (ebk "\\e^K"    ee-delete-exp)                      ; Esc-^K

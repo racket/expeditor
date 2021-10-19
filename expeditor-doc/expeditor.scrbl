@@ -211,8 +211,9 @@ holding the Shift key).
        cursor, but invisible, that is used by various editing
        operations.}
 
-  @key["^W" ee-delete-between-point-and-mark]{Deletes content between
-       the cursor and the @tech{mark}.}
+  @key["^W" ee-delete-between-point-and-mark-or-backward]{Deletes content between
+       the cursor and the @tech{mark}. When no mark is set, deletes
+       one expression before the cursor.}
 
   @key["^Y" ee-yank-kill-buffer]{Inserts content previously deleted,
        where multiple consecutive deletions accumulate to one set of
