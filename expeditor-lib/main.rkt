@@ -1081,11 +1081,12 @@
 (let ([ebk ee-bind-key])
  ; newline oper<ations
   (ebk #\return   ee-newline/accept)                  ; Return, ^M
-  (ebk "^J"       ee-newline)                         ; ^J
-  (ebk "^O"       ee-open-line)                       ; ^O
+  (ebk "^J"       ee-newline/accept)                  ; ^J
 
   (ebk "\\e^M"    ee-newline)                         ; Esc-^M
   (ebk "\\e^J"    ee-accept)                          ; Esc-^J
+
+  (ebk "^O"       ee-open-line)                       ; ^O
 
  ; indenting operations
   (ebk "\\e\t"    ee-indent)                          ; Esc-Tab

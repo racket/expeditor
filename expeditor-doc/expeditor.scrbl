@@ -39,13 +39,13 @@ holding the Shift key).
 
 @binding-table[
 
-  @key[("Return") ee-newline/accept]{Reads and evaluates the
+  @key[("Return" "^J") ee-newline/accept]{Reads and evaluates the
        current entry, if it is complete, and otherwise inserts a
        newline and auto-indents. The notion of ``complete'' depends on
        a language, but typically includes requirements like no
        unbalanced parentheses.}
 
-  @key[("Esc-Return" "^J") ee-newline]{Inserts a newline and indents.}
+  @key[("Esc-Return") ee-newline]{Inserts a newline and indents.}
        
   @key[("Esc-^J") ee-accept]{Reads and evaluates the current entry,
        even if it is not otherwise recognized as complete.}
