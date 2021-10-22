@@ -1278,6 +1278,8 @@
   (current-expeditor-reader (lambda (in) (read-syntax (object-name in) in)))
   (define ee (expeditor-open (map bytes->string/utf-8
                                   (get-preference 'readline-input-history (lambda () null)))))
+  (unless ee
+    (error 'expeditor "initialization failed"))
   (current-prompt-read (lambda () (expeditor-read ee)))
   (exit-handler
    (let ([old (exit-handler)])
