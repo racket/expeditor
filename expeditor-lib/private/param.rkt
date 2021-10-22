@@ -131,8 +131,7 @@
 (define current-expeditor-ready-checker
   (make-parameter (lambda (ip)
                     (with-handlers ([exn:fail:read? (lambda (exn) #f)])
-                      (read ip)
-                      #t))
+                      (not (eof-object? (read ip)))))
                   (lambda (p)
                     p)))
 
