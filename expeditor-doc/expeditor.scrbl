@@ -196,8 +196,10 @@ holding the Shift key).
   @key[("^G") ee-delete-entry]{Deletes the full content of the editor
        region.}
   
-  @key[("^C") ee-reset-entry]{Deletes the full content of the editor
-       region, and also moves to the end of the history.}
+  @key[("^C") ee-reset-entry/break]{Deletes the full content of the editor
+       region, and also moves to the end of the history---unless the editor
+       region is empty, in which case a break signal is sent to the current
+       thread.}
 
   @key[("Esc-Delete" "Esc-^K") ee-delete-exp]{Deletes one expression
        after the cursor, where the definition of ``expression'' is

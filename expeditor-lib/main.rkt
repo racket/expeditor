@@ -193,7 +193,11 @@
                                     (ee-display-string (exn-message exn))
                                     (ee-write-char #\newline)
                                     (update-history! ee entry)
-                                    (void))])
+                                    (void))]
+                       [exn:break? (lambda (exn)
+                                     (ee-flush)
+                                     (no-raw-mode)
+                                     (raise exn))])
         (dispatch ee entry base-dispatch-table)))))
 
 (define (ee-prompt-and-read ee n)
@@ -735,6 +739,12 @@
     (history-fast-forward! ee)
     (ee-delete-entry ee entry c)))
 
+(define ee-reset-entry/break
+  (lambda (ee entry c)
+    (cond
+      [(null-entry? entry) (break-thread (current-thread))]
+      [else (ee-reset-entry ee entry c)])))
+
 (define-public (ee-transpose-word ee-transpose-exp)
   (define (make-transpose find-next-backward find-next-forward)
     (lambda (ee entry c)
@@ -1153,7 +1163,7 @@
   (ebk "\\ek"     ee-delete-to-eol)                   ; Esc-k
   (ebk "^W"       ee-delete-between-point-and-mark-or-backward)   ; ^W
   (ebk "^G"       ee-delete-entry)                    ; ^G
-  (ebk "^C"       ee-reset-entry)                     ; ^C
+  (ebk "^C"       ee-reset-entry/break)               ; ^C
   (ebk "\\e^K"    ee-delete-exp)                      ; Esc-^K
   (ebk "\\e\\e[3~" ee-delete-exp)                     ; Esc-Delete
   (ebk "\\e\177"  ee-backward-delete-exp)             ; Esc-Backspace
