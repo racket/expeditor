@@ -553,10 +553,14 @@
   (lambda (ee entry c)
     (cond
       [(null-entry? entry) entry]
-      [(and (last-line? ee entry)
-            (only-whitespace-left? ee entry)
+      [(and (only-whitespace-left? ee entry)
             ((current-expeditor-ready-checker)
              (open-input-string (entry->string entry))))
+       (let loop ()
+         (delete-to-eol ee entry)
+         (unless (last-line? ee entry)
+           (join-rows ee entry)
+           (loop)))
        ;; #f result tells calling `ee-read` to return expr:
        #f]
       [else
