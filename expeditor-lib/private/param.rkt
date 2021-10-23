@@ -23,7 +23,8 @@
          current-expeditor-completer
          current-expeditor-grouper
          current-expeditor-history
-         current-expeditor-indenter)
+         current-expeditor-indenter
+         current-expeditor-color-enabled)
 
 (define (fxnonnegative? v)
   (and (fixnum? v)
@@ -159,3 +160,7 @@
 
 (define current-expeditor-indenter
   (make-parameter (lambda (obj start auto?) #f)))
+
+(define current-expeditor-color-enabled
+  (make-parameter #t
+                  (lambda (v) (and v #t))))

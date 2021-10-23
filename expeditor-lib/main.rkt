@@ -29,6 +29,7 @@
          current-expeditor-parentheses
          current-expeditor-grouper
          current-expeditor-indenter
+         current-expeditor-color-enabled
 
          current-expeditor-during-read-evt)
 
@@ -103,7 +104,8 @@
           (ee-display-string (make-string (screen-cols) #\-))
           (carriage-return)
           (line-feed))
-        (set-fg-color error-color)
+        (when (current-expeditor-color-enabled)
+          (set-fg-color error-color))
         (let* ([s (let ([sop (open-output-string)])
                     (report sop)
                     (get-output-string sop))]
@@ -111,7 +113,8 @@
           (let loop ([i 0] [msg-lines 0])
             (if (= i n)
                 (begin
-                  (set-fg-color default-color)
+                  (when (current-expeditor-color-enabled)
+                    (set-fg-color default-color))
                   (when bars-around-read-errors?
                     (unless (fx< (screen-rows) 3)
                       (ee-display-string (make-string (screen-cols) #\-))
@@ -1303,12 +1306,16 @@
                     (list 0 "")
                     (car r))
                 (and indent
-                     (indent t pos)))]))))))
+                     (indent t pos)))])))))
+  (current-expeditor-color-enabled (get-preference 'expeditor-color-enabled
+                                                   (lambda () #t))))
 
 (define (expeditor-error-display obj)
-  (set-fg-color error-color)
+  (when (current-expeditor-color-enabled)
+    (set-fg-color error-color))
   (ee-display-string obj)
-  (set-fg-color default-color))
+  (when (current-expeditor-color-enabled)
+    (set-fg-color default-color)))
 
 (module+ main
   (port-count-lines! (current-input-port))
