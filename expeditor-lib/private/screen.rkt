@@ -12,13 +12,16 @@
  (protect-out init-screen
               screen-resize! screen-rows screen-cols
               ee-winch? ee-char-ready? ee-peek-char ee-read-char
-              ee-write-char ee-display-string)
+              ee-write-char ee-display-string
+              wait
+              set-fg-color)
  raw-mode no-raw-mode
  ee-flush
  move-cursor-up move-cursor-right move-cursor-left move-cursor-down
  scroll-reverse clear-eol clear-eos clear-screen
  carriage-return line-feed
- bell pause get-clipboard wait)
+ bell pause get-clipboard
+ set-color)
 
 ; screen state
 (define cols #f)
@@ -172,3 +175,5 @@
       (nanosleep 0 (* 10 1000 1000)) ; 10ms granularity is best we can assume
       (wait (- ms 10)))))
 
+(define (set-fg-color color)
+  (set-color color #f))

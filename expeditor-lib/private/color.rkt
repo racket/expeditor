@@ -20,3 +20,5 @@
 (define light-magenta-color 13)
 (define light-cyan-color 14)
 (define white-color 15)
+
+(define error-color light-red-color)

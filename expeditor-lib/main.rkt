@@ -10,7 +10,8 @@
          "private/param.rkt"
          "private/ee.rkt"
          "private/history.rkt"
-         "private/token.rkt")
+         "private/token.rkt"
+         "private/color.rkt")
 
 (provide call-with-expeditor
          expeditor-open
@@ -18,6 +19,8 @@
          expeditor-read
 
          expeditor-configure
+
+         expeditor-error-display
 
          current-expeditor-lexer
          current-expeditor-ready-checker
@@ -97,6 +100,7 @@
         (ee-display-string (make-string (screen-cols) #\-))
         (carriage-return)
         (line-feed)
+        (set-fg-color error-color)
         (let* ([s (let ([sop (open-output-string)])
                     (report sop)
                     (get-output-string sop))]
@@ -104,6 +108,7 @@
           (let loop ([i 0] [msg-lines 0])
             (if (= i n)
                 (begin
+                  (set-fg-color default-color)
                   (unless (fx< (screen-rows) 3)
                     (ee-display-string (make-string (screen-cols) #\-))
                     (carriage-return)
@@ -1293,6 +1298,11 @@
                     (car r))
                 (and indent
                      (indent t pos)))]))))))
+
+(define (expeditor-error-display obj)
+  (set-fg-color error-color)
+  (ee-display-string obj)
+  (set-fg-color default-color))
 
 (module+ main
   (port-count-lines! (current-input-port))
