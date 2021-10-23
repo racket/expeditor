@@ -201,6 +201,9 @@ holding the Shift key).
        region is empty, in which case a break signal is sent to the current
        thread.}
 
+  @key[("Esc-d") ee-delete-word]{Deletes one whitespace-delimited word
+       after the cursor.}
+
   @key[("Esc-Delete" "Esc-^K") ee-delete-exp]{Deletes one expression
        after the cursor, where the definition of ``expression'' is
        language-specific.}

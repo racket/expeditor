@@ -800,6 +800,18 @@
           (beep "start of expression not found"))))
     entry))
 
+(define (ee-delete-word ee entry c)
+  (define pos
+    (find-next-word
+     ee entry
+     (entry-row entry)
+     (entry-col entry)))
+  (delete-forward
+   ee entry
+   (pos-row pos)
+   (pos-col pos))
+  entry)
+
 (define ee-redisplay
   (lambda (ee entry c)
     (if (eq? (eestate-last-op ee) ee-redisplay)
@@ -1164,6 +1176,7 @@
   (ebk "^W"       ee-delete-between-point-and-mark-or-backward)   ; ^W
   (ebk "^G"       ee-delete-entry)                    ; ^G
   (ebk "^C"       ee-reset-entry/break)               ; ^C
+  (ebk "\\ed"     ee-delete-word)                     ; Esc-d
   (ebk "\\e^K"    ee-delete-exp)                      ; Esc-^K
   (ebk "\\e\\e[3~" ee-delete-exp)                     ; Esc-Delete
   (ebk "\\e\177"  ee-backward-delete-exp)             ; Esc-Backspace
