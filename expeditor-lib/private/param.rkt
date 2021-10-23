@@ -130,8 +130,18 @@
 
 (define current-expeditor-ready-checker
   (make-parameter (lambda (ip)
-                    (with-handlers ([exn:fail:read? (lambda (exn) #f)])
-                      (not (eof-object? (read ip)))))
+                    (let loop ([first? #f])
+                      (define status
+                        (with-handlers ([exn:fail:read:eof? (lambda (exn) #f)]
+                                        [exn:fail:read? (lambda (exn) #t)])
+                          (define v (read ip))
+                          (if (eof-object? v)
+                              v
+                              #t)))
+                      (if (eof-object? status)
+                          (not first?)
+                          (and status
+                               (loop #f)))))
                   (lambda (p)
                     p)))
 
