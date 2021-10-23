@@ -420,7 +420,7 @@
                [(error) error-color]
                [(opener closer hash-colon-keyword) red-color]
                [(string text constant) green-color]
-               [(symbol) blue-color]
+               [(symbol) light-blue-color]
                [(comment) yellow-color]
                [else default-color]))
            (for ([i (in-range start end)])
