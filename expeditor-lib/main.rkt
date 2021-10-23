@@ -408,7 +408,7 @@
   (when (current-expeditor-color-enabled)
     (define str (entry->string entry))
     (define colors (make-vector (string-length str) default-color))
-    (define sip (open-input-string str))
+    (define sip (open-input-string/count str))
     (let loop ([state #f])
       (let-values ([(type value start end new-state) (read-token sip state)])
         (case type
