@@ -604,7 +604,9 @@
        #f]
       [else
        (insert-strings-before ee entry '("" ""))
-       (when (should-auto-indent? ee) (indent ee entry #t))
+       (when (should-auto-indent? ee)
+         (indent ee entry #t)
+         (recolor ee entry))
        entry])))
 
 (define ee-newline
@@ -613,7 +615,9 @@
       [(null-entry? entry) entry]
       [else
        (insert-strings-before ee entry '("" ""))
-       (when (should-auto-indent? ee) (indent ee entry #t))
+       (when (should-auto-indent? ee)
+         (indent ee entry #t)
+         (recolor ee entry))
        entry])))
 
 (define ee-accept
@@ -645,18 +649,22 @@
   (lambda (ee entry c)
     (let ([point (entry-point entry)])
       (insert-strings-before ee entry '("" ""))
-      (when (should-auto-indent? ee) (indent ee entry #t))
+      (when (should-auto-indent? ee)
+        (indent ee entry #t)
+        (recolor ee entry))
       (goto ee entry point)
       entry)))
 
 (define ee-indent
   (lambda (ee entry c)
     (indent ee entry)
+    (recolor ee entry)
     entry))
 
 (define ee-indent-all
   (lambda (ee entry c)
     (indent-all ee entry)
+    (recolor ee entry)
     entry))
 
 (define ee-backward-char
@@ -742,6 +750,7 @@
           (let ([killbuf (delete-to-eol ee entry)])
              (unless (equal? killbuf '(""))
                (set-eestate-killbuf! ee killbuf)))
+          (recolor ee entry)
           entry))))
 
 (define ee-delete-between-point-and-mark
@@ -754,7 +763,8 @@
                   (begin
                     (goto ee entry mark)
                     (delete-forward ee entry (pos-row point) (pos-col point)))
-                  (delete-forward ee entry (pos-row mark) (pos-col mark)))))
+                  (delete-forward ee entry (pos-row mark) (pos-col mark))))
+            (recolor ee entry))
           (beep "mark not set")))
     entry))
 
@@ -812,7 +822,8 @@
            (define pre (delete-forward ee entry (pos-row pre-end-pos) (pos-col pre-end-pos)))
            (insert-strings-before ee entry post)
            (move-forward ee entry delta)
-           (insert-strings-before ee entry pre)]
+           (insert-strings-before ee entry pre)
+           (recolor ee entry)]
           [else
            (beep "start or end not found")]))
       entry))
@@ -826,10 +837,12 @@
   (lambda (ee entry c)
     (let ([pos (find-next-exp-forward ee entry
                  (entry-row entry) (entry-col entry) #f)])
-      (if pos
-          (set-eestate-killbuf! ee
-            (delete-forward ee entry (pos-row pos) (pos-col pos)))
-          (beep "end of expression not found")))
+      (cond
+        [pos
+         (set-eestate-killbuf! ee (delete-forward ee entry (pos-row pos) (pos-col pos)))
+         (recolor ee entry)]
+        [else
+         (beep "end of expression not found")]))
     entry))
 
 (define ee-backward-delete-exp
@@ -839,7 +852,8 @@
         (if pos
             (begin
               (goto ee entry pos)
-              (set-eestate-killbuf! ee (delete-forward ee entry row col)))
+              (set-eestate-killbuf! ee (delete-forward ee entry row col))
+              (recolor ee entry))
           (beep "start of expression not found"))))
     entry))
 
@@ -853,6 +867,7 @@
    ee entry
    (pos-row pos)
    (pos-col pos))
+  (recolor ee entry)
   entry)
 
 (define ee-redisplay
@@ -866,6 +881,7 @@
 (define ee-yank-kill-buffer
   (lambda (ee entry c)
     (insert-strings-before ee entry (eestate-killbuf ee))
+    (recolor ee entry)
     entry))
 
 (define ee-yank-selection
@@ -877,12 +893,14 @@
           (if (and (fx>= n 0) (char=? (string-ref s n) #\newline))
               (substring s 0 n)
               s))))
+    (recolor ee entry)
     entry))
 
 (define ee-string-macro
   (lambda (str)
     (lambda (ee entry c)
       (insert-string-before ee entry str)
+      (recolor ee entry)
       entry)))
 
 (define ee-eof
@@ -895,9 +913,14 @@
   (lambda (ee entry c)
     (cond
       [(end-of-line? ee entry)
-       (unless (last-line? ee entry) (join-rows ee entry))
+       (unless (last-line? ee entry)
+         (join-rows ee entry)
+         (recolor ee entry))
        entry]
-      [else (delete-char ee entry) entry])))
+      [else
+       (delete-char ee entry)
+       (recolor ee entry)
+       entry])))
 
 (define ee-eof/delete-char
   (lambda (ee entry c)
@@ -907,9 +930,14 @@
            entry     ; assume attempt to continue deleting chars
            eof)]
       [(end-of-line? ee entry)
-       (unless (last-line? ee entry) (join-rows ee entry))
+       (unless (last-line? ee entry)
+         (join-rows ee entry)
+         (recolor ee entry))
        entry]
-      [else (delete-char ee entry) entry])))
+      [else
+       (delete-char ee entry)
+       (recolor ee entry)
+       entry])))
 
 (define ee-backward-delete-char
   (lambda (ee entry c)
@@ -917,10 +945,12 @@
         (unless (first-line? ee entry)
           (move-up ee entry)
           (move-eol ee entry)
-          (join-rows ee entry))
+          (join-rows ee entry)
+          (recolor ee entry))
         (begin
           (move-left ee entry)
-          (delete-char ee entry)))
+          (delete-char ee entry)
+          (recolor ee entry)))
     entry))
 
 (define ee-insert-paren
