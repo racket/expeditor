@@ -402,7 +402,30 @@
         [else
          (set-eestate-cc?! ee #f)
          (ee-indent ee entry c)])))
-)
+  )
+
+(define (recolor ee entry)
+  (when (current-expeditor-color-enabled)
+    (define str (entry->string entry))
+    (define colors (make-vector (string-length str) default-color))
+    (define sip (open-input-string str))
+    (let loop ([state #f])
+      (let-values ([(type value start end new-state) (read-token sip state)])
+        (case type
+          [(eof)
+           (update-entry-colors ee entry colors)]
+          [else
+           (define color
+             (case type
+               [(error) error-color]
+               [(opener closer hash-colon-keyword) red-color]
+               [(string text constant) green-color]
+               [(symbol) blue-color]
+               [(comment) yellow-color]
+               [else default-color]))
+           (for ([i (in-range start end)])
+             (vector-set! colors i color))
+           (loop new-state)])))))
 
 (define ee-insert-self
   (lambda (ee entry c)
@@ -414,7 +437,8 @@
        (ee-insert-paren ee entry c)]
       [else
        (unless ((char->integer c) . < . 32) ; don't insert control characters
-         (add-char ee entry c))
+         (add-char ee entry c)
+         (recolor ee entry))
        entry])))
 
 (define ee-command-repeat
@@ -463,6 +487,7 @@
       (clear-entry ee entry)
       (let ([entry (string->entry ee s)])
         (redisplay ee entry #f) ; Chez Scheme behavior is 1 instead of #f here
+        (recolor ee entry)
         (if (eq? dir 'up)
             (move-eol ee entry)
             (move-eoe ee entry))
@@ -901,8 +926,11 @@
 (define ee-insert-paren
   (lambda (ee entry c)
     (add-char ee entry c)
+    (recolor ee entry)
     (when (or (ee-flash-parens) (ee-auto-paren-balance))
-      (correct&flash-matching-delimiter ee entry))
+      (correct&flash-matching-delimiter ee entry
+                                        (lambda ()
+                                          (recolor ee entry))))
     entry))
 
 (define ee-goto-matching-delimiter

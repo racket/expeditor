@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/fixnum
          racket/symbol
+         racket/vector
          "port.rkt"
          "public.rkt"
          "screen.rkt"
@@ -8,7 +9,8 @@
          "assert.rkt"
          "param.rkt"
          "token.rkt"
-         "object.rkt")
+         "object.rkt"
+         "color.rkt")
 
 ;; See "../main.rkt"
 
@@ -72,7 +74,8 @@
               page-down
               page-up
               redisplay
-              should-auto-indent?))
+              should-auto-indent?
+              update-entry-colors))
 
 (define (fxzero? n) (fx= n 0))
 (define (fx1- n) (fx- n 1))
@@ -149,6 +152,8 @@
 ;;; the number of screen rows spanned along with a string containing
 ;;; the text of the line.  lines are implicitly separated by newlines; no
 ;;; newlines appear in the strings themselves.
+;;; each line also has a vector of colors for the characters in the
+;;; line's srring.
 ;;;
 ;;; lns   := (ln ln ...)  ;;; list of "ln"s
 ;;; ln    := [nsr, str]
@@ -156,20 +161,25 @@
 ;;; str   := string       ;;; contents of the line
 
 ;; arrange for nsr to be updated whenever str is changed
-(struct ln (str nsr)
+(struct ln (str nsr colors)
   #:mutable
   #:authentic
   #:sealed)
 (define (make-ln ee str)
-  (ln str (str->nsr ee str)))
-(define (ln-str-set! ee ln str)
+  (ln str (str->nsr ee str) (str->colors str)))
+(define (ln-str-set! ee ln str [colors (str->colors str)])
   (set-ln-str! ln str)
-  (set-ln-nsr! ln (str->nsr ee str)))
+  (set-ln-nsr! ln (str->nsr ee str))
+  (set-ln-colors! ln colors))
 (define ln-nsr-set! set-ln-nsr!)
+
+(define (str->colors str [color default-color])
+  (make-vector (string-length str) color))
     
 ; extract nsr or str from selected row of lns
 (define (lns->nsr lns row) (ln-nsr (list-ref lns row)))
 (define (lns->str lns row) (ln-str (list-ref lns row)))
+(define (lns->colors lns row) (ln-colors (list-ref lns row)))
 
 ; replace str in selected row of lns
 (define (lns->str! ee lns row str)
@@ -276,6 +286,15 @@
             (cons (substring str col (fx+ col width))
                   (f (fx+ col width) (screen-cols))))))))
 
+(define split-vector
+  (lambda (ee vec col)
+    (let ([vec-len (vector-length vec)])
+      (let f ([col col] [width (fx- (screen-cols) (col->screen-col ee col))])
+        (if (fx< (fx- vec-len col) width)
+            (list (vector-copy vec col vec-len))
+            (cons (vector-copy vec col (fx+ col width))
+                  (f (fx+ col width) (screen-cols))))))))
+
 (define (screen-lines-between ee entry toprow topoff nextrow nextoff)
   ; returns distance in physical screen lines between physical line
   ; topoff of toprow and nextoff of nextrow
@@ -366,6 +385,33 @@
 (define (phantom-prompt ee)
   (make-string (string-length (eestate-prompt ee)) #\space))
 
+(define (ee-display-string/colors str colors current-color)
+  (cond
+    [(current-expeditor-color-enabled)
+     (let loop ([i 0] [current-color current-color])
+       (cond
+         [(= i (string-length str))
+          current-color]
+         [(eqv? current-color (vector-ref colors i))
+          (define j (let loop ([j (add1 i)])
+                      (cond
+                        [(= j (string-length str)) j]
+                        [(eqv? current-color (vector-ref colors j)) (loop (add1 j))]
+                        [else j])))
+          (ee-display-string (substring str i j))
+          (loop j current-color)]
+         [else
+          (define color (vector-ref colors i))
+          (set-fg-color color)
+          (loop i color)]))]
+    [else
+     (ee-display-string str)
+     current-color]))
+
+(define (finish-color current-color)
+  (unless (eqv? current-color default-color)
+    (set-fg-color default-color)))
+
 (define-public (display-rest/goto)
   (define (display-rest-of-line ee entry row col clear?)
     ; display as much of the rest of row as will fit on the screen
@@ -376,17 +422,22 @@
                              (fx- (lns->nsr lns row) 1))
                          (col->line-offset ee col))]
                  [str-lst (split-string ee (lns->str lns row) col)]
+                 [colors-lst (split-vector ee (lns->colors lns row) col)]
+                 [current-color default-color]
                  [new-col col])
         (when clear? (clear-eol))
-        (let ([str (car str-lst)])
-          (ee-display-string (car str-lst))
-          (let ([new-col (fx+ new-col (string-length str))])
-            (if (fx= n 0)
-                new-col
-                (begin
-                  (carriage-return)
-                  (line-feed)
-                  (loop (fx- n 1) (cdr str-lst) new-col))))))))
+        (let ([str (car str-lst)]
+              [colors (car colors-lst)])
+          (let ([current-color (ee-display-string/colors str colors current-color)])
+            (let ([new-col (fx+ new-col (string-length str))])
+              (if (fx= n 0)
+                  (begin
+                    (finish-color current-color)
+                    new-col)
+                  (begin
+                    (carriage-return)
+                    (line-feed)
+                    (loop (fx- n 1) (cdr str-lst) (cdr colors-lst) current-color new-col)))))))))
   
   (define (display-rest-of-entry ee entry)
     (let ([row (entry-row entry)]
@@ -433,23 +484,27 @@
       (goto ee entry (make-pos to-row to-col)))))
 
 (define-public (display-partial-entry)
-  (define (display-partial-row ee row str start end)
+  (define (display-partial-row ee row str colors start end)
     ; displays physical lines of str from start (inclusive) to end (inclusive)
     ; assumes cursor is at column zero of start line; leaves cursor at
     ; column zero of end line
-    (let ([ls (list-tail (split-string ee str 0) start)])
+    (let ([ls (list-tail (split-string ee str 0) start)]
+          [cs (list-tail (split-vector ee colors 0) start)])
       (when (fx= start 0)
         (ee-display-string
          (if (fx= row 0)
              (eestate-prompt ee)
              (phantom-prompt ee))))
-      (ee-display-string (car ls))
+      (define current-color (ee-display-string/colors (car ls) (car cs) default-color))
       (carriage-return)
-      (do ([i start (fx+ i 1)] [ls (cdr ls) (cdr ls)])
-          ((fx= i end))
-        (line-feed)
-        (ee-display-string (car ls))
-        (carriage-return))))
+      (let loop ([i start] [ls (cdr ls)] [cs (cdr cs)] [current-color current-color])
+        (cond
+          [(fx= i end) (finish-color current-color)]
+          [else
+           (line-feed)
+           (define next-color (ee-display-string/colors (car ls) (car cs) current-color))
+           (carriage-return)
+           (loop (fx+ i 1) (cdr ls) (cdr cs) next-color)]))))
 
   (define (display-partial-entry ee entry toprow topoff botrow botoff)
     ; displays physical screen lines between physical line topoff of
@@ -458,7 +513,7 @@
     ; leaves cursor at column zero of last line displayed
     (let ([lns (entry-lns entry)])
       (let loop ([r toprow] [start topoff] [lns (list-tail lns toprow)])
-        (display-partial-row ee r (ln-str (car lns)) start
+        (display-partial-row ee r (ln-str (car lns)) (ln-colors (car lns)) start
                              (if (fx= r botrow) botoff (fx- (ln-nsr (car lns)) 1)))
         (unless (fx= r botrow)
           (line-feed)
@@ -835,22 +890,31 @@
     (if (fx= r1 r2)
         (let* ([ln (list-ref (entry-lns entry) r1)]
                [s (ln-str ln)]
+               [colors (ln-colors ln)]
                [old-nsr (ln-nsr ln)])
           (ln-str-set! ee ln
                        (string-append
                         (substring s 0 c1)
-                        (substring s c2 (string-length s))))
+                        (substring s c2 (string-length s)))
+                       (vector-append
+                        (vector-copy colors 0 c1)
+                        (vector-copy colors c2 (string-length s))))
           (display-rest/goto ee entry (fx= (ln-nsr ln) old-nsr) #t r1 c1)
           (list (substring s c1 c2)))
         (let* ([lns (entry-lns entry)]
                [ls1 (list-tail lns r1)]
                [ls2 (list-tail ls1 (fx- r2 r1))]
                [s1 (ln-str (car ls1))]
-               [s2 (ln-str (car ls2))])
+               [s2 (ln-str (car ls2))]
+               [colors1 (ln-colors (car ls1))]
+               [colors2 (ln-colors (car ls2))])
           (ln-str-set! ee (car ls1)
                        (string-append
                         (substring s1 0 c1)
-                        (substring s2 c2 (string-length s2))))
+                        (substring s2 c2 (string-length s2)))
+                       (vector-append
+                        (vector-copy colors1 0 c1)
+                        (vector-copy colors2 c2 (string-length s2))))
           (let ([deleted
                  (cons (substring s1 c1 (string-length s1))
                        (let f ([ls (cdr ls1)])
@@ -860,6 +924,37 @@
             (set-entry-lns! entry (replace-cdr lns ls1 (cdr ls2)))
             (display-rest/goto ee entry #f #t r1 c1)
             deleted)))))
+
+(define (update-entry-colors ee entry new-colors)
+  (define init-cursor-row (entry-row entry))
+  (define init-cursor-col (entry-col entry))
+  (let loop ([lns (entry-lns entry)]
+             [i 0]
+             [row 0]
+             [current-color default-color])
+    (cond
+      [(null? lns)
+       (finish-color current-color)
+       (goto ee entry (make-pos init-cursor-row init-cursor-col))]
+      [else
+       (define str (ln-str (car lns)))
+       (define colors (ln-colors (car lns)))
+       (define len (string-length str))
+       (define next-color
+         (for/fold ([current-color current-color]) ([j (in-range len)])
+           (define new-color (vector-ref new-colors (+ i j)))
+           (cond
+             [(= new-color (vector-ref colors j))
+              current-color]
+             [else
+              (vector-set! colors j new-color)
+              (goto ee entry (make-pos row j))
+              (unless (eqv? current-color new-color)
+                (set-fg-color new-color))
+              (ee-display-string (string (string-ref str j)))
+              (set-entry-col! entry (add1 (entry-col entry)))
+              new-color])))
+       (loop (cdr lns) (+ i len 1) (add1 row) next-color)])))
 
 (define (replace-cdr l lh lt)
   (if (eq? l lh)
@@ -887,6 +982,7 @@
          [ln (list-ref lns row)]
          [str (ln-str ln)]
          [str-len (string-length str)]
+         [colors (ln-colors ln)]
          [new-col (fx+ col (string-length new-str))]
          [nsr (ln-nsr ln)]
          [eoe? (end-of-entry? ee entry)])
@@ -894,7 +990,17 @@
                  (string-append
                   (substring str 0 col)
                   new-str
-                  (substring str col (string-length str))))
+                  (substring str col (string-length str)))
+                 (vector-append
+                  (vector-copy colors 0 col)
+                  (str->colors new-str (cond
+                                          [(col . > . 0)
+                                           (vector-ref colors (sub1 col))]
+                                          [(col . < . (string-length str))
+                                           (vector-ref colors col)]
+                                          [else
+                                           default-color]))
+                  (vector-copy colors col (string-length str))))
     (let ([just-row? (fx= (ln-nsr ln) nsr)])
       (display-rest/goto ee entry just-row?
                          ; avoid clear-eol/eos if insertion takes place at end of entry or
@@ -918,9 +1024,12 @@
                [ls (list-tail lns row)]
                [ln (car ls)]
                [point-str (ln-str ln)]
+               [point-colors (ln-colors ln)]
                [eoe? (end-of-entry? ee entry)])
           (ln-str-set! ee ln
-                       (string-append (substring point-str 0 col) (car strs)))
+                       (string-append (substring point-str 0 col) (car strs))
+                       (vector-append (vector-copy point-colors 0 col)
+                                      (str->colors (car strs) default-color)))
           (define new-cdr
             (let f ([str (cadr strs)] [strs (cddr strs)])
               (if (null? strs)
@@ -1055,7 +1164,7 @@
          (move-cursor-up nlines)
          (move-cursor-right ncols))])))
 
-(define (correct&flash-matching-delimiter ee entry)
+(define (correct&flash-matching-delimiter ee entry on-correct)
   (define (expected left)
     (for/or ([p (in-list (current-expeditor-parentheses))])
       (define l (symbol->immutable-string (car p)))
@@ -1069,6 +1178,7 @@
     (let* ([row (entry-row entry)]
            [col (entry-col entry)]
            [str (lns->str lns row)]
+           [colors (lns->colors lns row)]
            [c (string-ref str col)])
       (cond
         [(and (for/or ([p (in-list (current-expeditor-parentheses))])
@@ -1080,14 +1190,19 @@
               (find-matching-delim-backward ee entry row col
                                             (ee-auto-paren-balance)))
          => (lambda (mpos)
-              (let ([cexp (expected
-                           (string-ref
-                            (lns->str lns (pos-row mpos))
-                            (pos-col mpos)))])
+              (define col (pos-col mpos))
+              (define ln (list-ref lns (pos-row mpos)))
+              (let ([cexp (expected (string-ref (ln-str ln) col))])
                 (unless (eqv? c cexp)
                   (string-set! str col cexp)
+                  (define color (vector-ref (ln-colors ln) col))
+                  (unless (eqv? color default-color)
+                    (set-fg-color color))
                   (ee-write-char cexp)
-                  (move-cursor-left 1)))
+                  (unless (eqv? color default-color)
+                    (set-fg-color default-color))
+                  (move-cursor-left 1)
+                  (on-correct)))
               (when (ee-flash-parens) (flash ee entry mpos)))]
         [else
          (when (ee-flash-parens)
@@ -1352,10 +1467,11 @@
     
     (define (find-unmatched-left-delim row)
       (let* ([ln (list-ref (entry-lns entry) row)]
-             [s (ln-str ln)])
+             [s (ln-str ln)]
+             [colors (ln-colors ln)])
         (ln-str-set! ee ln (string rpchar))
         (let ([pos (find-matching-delim-backward ee entry row 0 #t)])
-          (ln-str-set! ee ln s)
+          (ln-str-set! ee ln s colors)
           pos)))
     (let ([lns (entry-lns entry)])
       (cond
