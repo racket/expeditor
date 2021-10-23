@@ -89,6 +89,8 @@
     (when (ee-noisy) (bell))))
 
 (define-public (ee-read)
+  (define bars-around-read-errors? #f)
+  
   (define (accept ee entry kf #:newline? [newline? #t])
     (let* ([str (entry->string entry)]
            [sip (open-input-string/count str)])
@@ -97,9 +99,10 @@
           (display (exn-message exn) sop))
         ;; clear entry before report has a chance to muck with point position
         (clear-entry ee entry)
-        (ee-display-string (make-string (screen-cols) #\-))
-        (carriage-return)
-        (line-feed)
+        (when bars-around-read-errors?
+          (ee-display-string (make-string (screen-cols) #\-))
+          (carriage-return)
+          (line-feed))
         (set-fg-color error-color)
         (let* ([s (let ([sop (open-output-string)])
                     (report sop)
@@ -109,10 +112,11 @@
             (if (= i n)
                 (begin
                   (set-fg-color default-color)
-                  (unless (fx< (screen-rows) 3)
-                    (ee-display-string (make-string (screen-cols) #\-))
-                    (carriage-return)
-                    (line-feed))
+                  (when bars-around-read-errors?
+                    (unless (fx< (screen-rows) 3)
+                      (ee-display-string (make-string (screen-cols) #\-))
+                      (carriage-return)
+                      (line-feed)))
                   (redisplay ee entry (max (fx- (screen-rows) msg-lines 2) 1)))
                 (let ([m (min (fx+ i (screen-cols)) n)])
                   (ee-display-string (substring s i m))
@@ -452,11 +456,13 @@
                  (string=? key (substring str i n))))))))
 
   (define new-entry
-    (lambda (ee entry s)
+    (lambda (ee entry s dir)
       (clear-entry ee entry)
       (let ([entry (string->entry ee s)])
-        (redisplay ee entry 1)
-        (move-eol ee entry)
+        (redisplay ee entry #f) ; Chez Scheme behavior is 1 instead of #f here
+        (if (eq? dir 'up)
+            (move-eol ee entry)
+            (move-eoe ee entry))
         entry)))
 
   (define ee-history-bwd
@@ -469,7 +475,7 @@
          => (lambda (s)
               ;; clear histkey when null as favor to search commands
               (when (null-entry? entry) (set-eestate-histkey! ee ""))
-              (new-entry ee entry s))]
+              (new-entry ee entry s 'up))]
         [else
          (beep "invalid history movement")
          entry])))
@@ -484,7 +490,7 @@
          (lambda (s)
           ; clear histkey when null as favor to search commands
            (when (null-entry? entry) (set-eestate-histkey! ee ""))
-           (new-entry ee entry s))]
+           (new-entry ee entry s 'down))]
         [else
          (beep "invalid history movement")
          entry])))
@@ -498,7 +504,7 @@
             (cond
               [(history-search-bwd ee
                  (lambda (s) (match? (eestate-histkey ee) s))) =>
-               (lambda (s) (new-entry ee entry s))]
+               (lambda (s) (new-entry ee entry s 'up))]
               [else
                (beep "invalid history movement")
                entry]))
@@ -507,7 +513,7 @@
           (cond
             [(history-search-bwd ee
                (lambda (s) (match? (eestate-histkey ee) s))) =>
-             (lambda (s) (new-entry ee entry s))]
+             (lambda (s) (new-entry ee entry s 'up))]
             [else
              (beep "invalid history movement")
              entry]))))
@@ -522,7 +528,7 @@
             (cond
               [(history-search-fwd ee
                  (lambda (s) (prefix? (eestate-histkey ee) s))) =>
-               (lambda (s) (new-entry ee entry s))]
+               (lambda (s) (new-entry ee entry s 'done))]
               [else
                (beep "invalid history movement")
                entry]))
@@ -531,9 +537,9 @@
           (cond
             [(history-search-fwd ee
                (lambda (s) (match? (eestate-histkey ee) s))) =>
-             (lambda (s) (new-entry ee entry s))]
+             (lambda (s) (new-entry ee entry s 'done))]
             [else
-             (let ([entry (new-entry ee entry (eestate-histkey ee))])
+             (let ([entry (new-entry ee entry (eestate-histkey ee) 'down)])
                (history-fast-forward! ee)
                entry)]))))
 
