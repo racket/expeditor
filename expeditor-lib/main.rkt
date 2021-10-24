@@ -196,6 +196,7 @@
       (carriage-return)
       (redisplay ee entry)
       (move-eol ee entry)
+      (recolor ee entry)
       (with-handlers* ([exn:fail? (lambda (exn)
                                     (carriage-return)
                                     (line-feed)
@@ -407,25 +408,26 @@
 (define (recolor ee entry)
   (when (current-expeditor-color-enabled)
     (define str (entry->string entry))
-    (define colors (make-vector (string-length str) default-color))
-    (define sip (open-input-string/count str))
-    (let loop ([state #f])
-      (let-values ([(type value start end new-state) (read-token sip state)])
-        (case type
-          [(eof)
-           (update-entry-colors ee entry colors)]
-          [else
-           (define color
-             (case type
-               [(error) error-color]
-               [(opener closer hash-colon-keyword) red-color]
-               [(string text constant) green-color]
-               [(symbol) light-blue-color]
-               [(comment) yellow-color]
-               [else default-color]))
-           (for ([i (in-range start end)])
-             (vector-set! colors i color))
-           (loop new-state)])))))
+    (unless (equal? str "")
+      (define colors (make-vector (string-length str) default-color))
+      (define sip (open-input-string/count str))
+      (let loop ([state #f])
+        (let-values ([(type value start end new-state) (read-token sip state)])
+          (case type
+            [(eof)
+             (update-entry-colors ee entry colors)]
+            [else
+             (define color
+               (case type
+                 [(error) error-color]
+                 [(opener closer hash-colon-keyword) red-color]
+                 [(string text constant) green-color]
+                 [(symbol) light-blue-color]
+                 [(comment) yellow-color]
+                 [else default-color]))
+             (for ([i (in-range start end)])
+               (vector-set! colors i color))
+             (loop new-state)]))))))
 
 (define ee-insert-self
   (lambda (ee entry c)
