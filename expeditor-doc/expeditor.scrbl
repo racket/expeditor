@@ -1,17 +1,30 @@
 #lang scribble/manual
-@(require racket/list)
+@(require racket/list
+          (for-syntax racket/base)
+          (for-label racket/contract/base
+                     racket/base
+                     expeditor
+                     (submod expeditor configure)
+                     racket/file))
 
 @(define (onekey s) (regexp-replace #rx"\\^" (regexp-replace #rx"Esc-" s "Meta-") "Ctl-"))
 @(define (binding-table . keys) (apply itemlist  keys))
-@(define (key* keys prod . content)
-   (item (if (string? keys)
-             (onekey keys)
-             (add-between (map onekey keys) " or "))
+@(define (key* keys proc . content)
+   (item (elemtag
+          `("key" ,(if (string? keys) keys (car keys)))
+          (if (string? keys)
+              (onekey keys)
+              (add-between (map onekey keys) " or ")))
          " --- "
-         content))
-@(define-syntax-rule (key keys code . content) (key* 'keys 'code . content))
+         content
+         "(Implementation: " proc ")"))
+@(define-syntax-rule (key keys proc . content) (key* 'keys @racket[proc] . content))
 
 @(define (subsection* s) (subsection #:style '(unnumbered) s))
+
+@(define (see-dr tag)
+   @list{See @seclink[tag #:doc '(lib "scribblings/tools/tools.scrbl") #:indirect? #t]{the DrRacket manual}
+         for more information.})
 
 @title{Expeditor: Terminal Expression Editor}
 
@@ -19,21 +32,29 @@
 
 The expeditor (the @bold{exp}ression @bold{editor}) supports
 multi-line editing with indentation and completion support within a
-terminal. It's based on Chez Scheme's expression editor, but can be
-adapted to Racket languages using the same hooks and APIs as DrRacket.
-Normally, the expeditor is run automatically by @racketmodname[xrepl
+terminal. It's based on Chez Scheme's expression editor, but adapts to
+Racket languages using the same hooks and APIs as DrRacket. Normally,
+the expeditor is run automatically by @racketmodname[xrepl
 #:indirect], which is turn loaded by the @exec{racket} command-line
 executable.
 
+For customization of keybindings, see @secref["customization"]. To
+disable or enable color in expeditor, you can use xrepl's
+@litchar{,color} command.
 
-@section{Default Key Bindings}
+@local-table-of-contents[]
 
-In the keybinding descriptions below, a ``Meta-'' combination can be
-typed as the Esc key (pressed then released) followed by the rest of
-the combination. A terminal will typically report a combination using
-the Alt or Option key as that Esc sequence. In a ``Ctl-'' combination,
-the letter case of the key doesn't matter (i.e., doesn't require
-holding the Shift key).
+@; ----------------------------------------
+
+@section[#:tag "key-bindings"]{Default Key Bindings}
+
+In the keybinding descriptions below, a ``Meta-'' combination usually
+means ``Alt-'' or ``Option-'', depending on your keyboard. It also can
+be typed as the Esc key (pressed then released) followed by the rest
+of the combination; a terminal will typically report a combination
+using the Alt or Option key as that Esc sequence. In a ``Ctl-''
+combination, the letter case of the key doesn't matter (i.e., doesn't
+require holding the Shift key).
 
 @subsection*{Evaluation, Indentation, and Completion}
 
@@ -113,10 +134,10 @@ holding the Shift key).
   @key["Esc->" ee-end-of-entry]{Moves the cursor to the
        end of the editor region.}
 
-  @key[("Esc-f" "Esc-F" "^Right") ee-forward-word]{Moves the cursor
+  @key[("^Right" "Esc-f" "Esc-F") ee-forward-word]{Moves the cursor
        forward one whitespace-delimited word.}
        
-  @key[("Esc-b" "Esc-B" "^Left") ee-backward-word]{Moves the cursor
+  @key[("^Left" "Esc-b" "Esc-B") ee-backward-word]{Moves the cursor
        backward one whitespace-delimited word.}
 
   @key["Esc-]" ee-goto-matching-delimiter]{Moves the cursor to the
@@ -125,11 +146,11 @@ holding the Shift key).
   @key["^]" ee-flash-matching-delimiter]{Flashes the cursor on the
        opener or closer opposite the one under the cursor.}
 
-  @key[("Esc-^F" "Esc-^Right") ee-forward-exp]{Moves the cursor forward
+  @key[("Esc-^Right" "Esc-^F") ee-forward-exp]{Moves the cursor forward
        one expression, where the definition of ``expression'' is
        language-specific.}
        
-  @key[("Esc-^B" "Esc-^Left") ee-backward-exp]{Moves the cursor backward
+  @key[("Esc-^Left" "Esc-^B") ee-backward-exp]{Moves the cursor backward
        one language-specific expression.}
 
   @key[("Esc-^U") ee-upward-exp]{Moves the cursor upward/outward
@@ -244,3 +265,408 @@ holding the Shift key).
   @key["^Z" ee-suspend-process]{Suspends the current process.}
 
 ]
+
+@; ----------------------------------------
+
+@section[#:tag "customization"]{Customizing Expeditor}
+
+@(define-syntax (keyproc stx)
+   (syntax-case stx ()
+     [(_ id body ...)
+      (with-syntax ([ee (datum->syntax #'id 'ee)]
+                    [entry (datum->syntax #'id 'entry)]
+                    [c (datum->syntax #'id 'c)])
+        #`@defproc[(id [ee eestate?]
+                       [entry entry?]
+                       [c char?])
+                   entry?
+                   body ...])]))
+
+@defmodule[(submod expeditor configure)]
+
+When @racket[expeditor-configure] is called---such as when xrepl
+initializes the expeditor, which is the default behavior when running
+@exec{racket} at the command line---it dynamically requires the module
+file reported by @racket[(expeditor-init-file-path)], if that file
+exists. The module file can import @racketmodname[(submod expeditor
+configure)] to configure key bindings and colors.
+
+For example, the following module as
+@racket[(expeditor-init-file-path)] changes the behavior of
+@onekey["^J"] and changes the color of literals from green to magenta:
+
+@racketblock[
+@#,hash-lang[] racket/base
+(require (submod expeditor configure))
+
+(expeditor-bind-key! "^J" ee-newline)
+(expeditor-set-syntax-color! 'literal 'magenta)
+]
+
+@; ----------------------------------------
+
+@subsection{Key-Handling Functions}
+
+A key-handling function accepts three values: a representation of the
+terminal state, a representation of the current editor region, and a
+character. The result is a representation of the editor region
+(usually the one passed in) or @racket[#f] to indicate that the
+current editor region should be accepted as input.
+
+@(define (see-key key)
+   @elem{Implements the behavior described for @elemref[`("key" ,key)]{@onekey[key]}.})
+
+@defproc[(expeditor-bind-key! [key string?]
+                              [handler (eestate? entry? char . -> . (or/c #f entry?))])
+         void?]{
+
+Binds the action of @racket[key] to @racket[handler], where
+@racket[handler] is typically one of the @racketidfont{ee-} functions
+described below.
+
+The @racket[key] string encodes either a single key or a sequence of
+keys:
+
+@itemlist[
+
+ @item{The sequence @litchar{\e} (so, in a literal string as
+       @racket["\\e"]) is treated as Escape, which at the start of a
+       sequence is normally the way terminals report ``Meta-'' key
+       combinations.}
+
+ @item{A @litchar{^} prefix on a character implies a ``Ctl-''
+       combination, like @racket["^a"] for Ctl-A.}
+
+ @item{The sequence @litchar{\\} is a backslash (so, in a literal
+       string as @racket["\\\\"]).}
+
+ @item{The sequence @litchar{\^} is the character character.}
+
+ @item{Anything else stands for itself.}
+
+]
+
+As examples, here are a few bindings from the default set:
+
+@racketblock[
+(expeditor-bind-key! "^B" ee-backward-char) (code:comment "Ctl-B")
+(expeditor-bind-key! "\\ef" ee-forward-word) (code:comment "Esc-f")
+(expeditor-bind-key! "\\e[C" ee-forward-char) (code:comment "Right")
+(expeditor-bind-key! "\\e[1;5C" ee-forward-word) (code:comment "Ctl-Right")
+]
+
+The Right and Ctl-Right bindings are derived from a typical sequence
+that a terminal generates for those key combinations. In your
+terminal, the @exec{od} program may be helpful in figuring how key
+presses turn into program input.}
+
+
+@keyproc[ee-insert-self/paren]{
+
+This function is the default operation for unmapped keys.
+
+Like @racket[ee-insert-self], but if @racket[c] is a ``parenthesis''
+character, flashes its match like
+@racket[ee-flash-matching-delimiter]. Furthermore, if @racket[c] is a
+closing ``parenthesis'', it may be corrected automatically based on
+its apparently intended match.}
+
+@keyproc[ee-insert-self]{
+
+Inserts @racket[c], as long as it is not a control character.}
+
+@defproc[((make-ee-insert-string [s string?])
+          [ee eestate?]
+          [entry entry?]
+          [c char?])
+         entry?]{
+
+Creates a key-handling function that inserts @racket[s].}
+
+@defproc[(ee-newline/accept [ee eestate?]
+                            [entry entry?]
+                            [c char?])
+         (or/c entry? #f)]{
+
+@see-key["Return"] Note that the return value is @racket[#f] in the
+case that the input should be accepted.}
+
+@defproc[(ee-accept [ee eestate?]
+                    [entry entry?]
+                    [c char?])
+         (or/c #f entry?)]{
+
+@see-key["Esc-^J"] Note that the return value is @racket[#f] in the
+case that the input should be accepted.}
+
+@keyproc[ee-newline]{@see-key["Esc-Return"]}
+
+@keyproc[ee-open-line]{@see-key["^O"]}
+
+@keyproc[ee-indent]{@see-key["Esc-Tab"]}
+@keyproc[ee-indent-all]{@see-key["Esc-q"]}
+
+@keyproc[ee-id-completion/indent]{@see-key["Tab"]}
+
+@keyproc[ee-id-completion]{
+
+Like @racket[ee-id-completion], but always attempts completion instead
+of tabbing.}
+
+@keyproc[ee-next-id-completion]{@see-key["^R"]}
+
+@keyproc[ee-backward-char]{@see-key["Left"]}
+@keyproc[ee-forward-char]{@see-key["Right"]}
+@keyproc[ee-next-line]{@see-key["Down"]}
+@keyproc[ee-previous-line]{@see-key["Up"]}
+@keyproc[ee-forward-word]{@see-key["^Right"]}
+@keyproc[ee-forward-exp]{@see-key["Esc-^Right"]}
+@keyproc[ee-backward-word]{@see-key["^Left"]}
+@keyproc[ee-backward-exp]{@see-key["Esc-^Left"]}
+@keyproc[ee-upward-exp]{@see-key["Esc-^U"]}
+@keyproc[ee-downward-exp]{@see-key["Esc-^D"]}
+@keyproc[ee-backward-page]{@see-key["PageUp"]}
+@keyproc[ee-forward-page]{@see-key["PageDown"]}
+
+@keyproc[ee-beginning-of-line]{@see-key["Home"]}
+@keyproc[ee-end-of-line]{@see-key["End"]}
+@keyproc[ee-beginning-of-entry]{@see-key["Esc-<"]}
+@keyproc[ee-end-of-entry]{@see-key["Esc->"]}
+           
+@keyproc[ee-goto-matching-delimiter]{@see-key["Esc-]"]}
+@keyproc[ee-flash-matching-delimiter]{@see-key["^]"]}
+
+@keyproc[ee-transpose-word]{@see-key["^T"]}
+@keyproc[ee-transpose-exp]{@see-key["Esc-^T"]}
+
+@keyproc[ee-set-mark]{@see-key["^@"]}
+@keyproc[ee-exchange-point-and-mark]{@see-key["^X-^X"]}
+
+@keyproc[ee-delete-char]{@see-key["Delete"]}
+@keyproc[ee-backward-delete-char]{@see-key["Backspace"]}
+@keyproc[ee-delete-line]{@see-key["^U"]}
+@keyproc[ee-delete-to-eol]{@see-key["^K"]}
+@keyproc[ee-delete-between-point-and-mark-or-backward]{@see-key["^W"]}
+@keyproc[ee-delete-entry]{@see-key["^G"]}
+
+@keyproc[ee-reset-entry/break]{@see-key["^C"]}
+@keyproc[ee-reset-entry]{Like @racket[ee-reset-entry/break], but never sends a break signal.}
+
+@keyproc[ee-delete-word]{@see-key["Esc-d"]}
+@keyproc[ee-delete-exp]{@see-key["Esc-Delete"]}
+@keyproc[ee-backward-delete-exp]{@see-key["Esc-Backspace"]}
+@keyproc[ee-yank-selection]{@see-key["^V"]}
+@keyproc[ee-yank-kill-buffer]{@see-key["^Y"]}
+
+@keyproc[ee-eof/delete-char]{@see-key["^D"]}
+@keyproc[ee-eof]{Like @racket[ee-eof/delete-char], but always return an end-of-file.}
+
+@keyproc[ee-redisplay]{@see-key["^L"]}
+
+@keyproc[ee-history-bwd]{@see-key["Esc-Up"]}
+@keyproc[ee-history-fwd]{@see-key["Esc-Down"]}
+@keyproc[ee-history-bwd-prefix]{@see-key["Esc-p"]}
+@keyproc[ee-history-bwd-contains]{@see-key["Esc-P"]}
+@keyproc[ee-history-fwd-prefix]{@see-key["Esc-n"]}
+@keyproc[ee-history-fwd-contains]{@see-key["Esc-N"]}
+
+@keyproc[ee-command-repeat]{
+
+Accumulates @racket[c] into a repeat count if it is a digit.
+Otherwise, performs the command associated with @racket[c] the number
+of times set up for repeating.}
+
+@keyproc[ee-suspend-process]{@see-key["^Z"]}))
+
+
+@defproc[(eestate? [v any/c]) boolean?]{
+
+Returns @racket[#t] if @racket[v] is a representation of the terminal
+state, @racket[#f] otherwise.}
+
+@defproc[(entry? [v any/c]) boolean?]{
+
+Returns @racket[#t] if @racket[v] is a representation of the current
+editor region, @racket[#f] otherwise.}
+
+@; ----------------------------------------
+
+@subsection{Colors}
+
+@defproc[(expeditor-set-syntax-color! [category (or/c 'error
+                                                      'paren
+                                                      'literal
+                                                      'identifier
+                                                      'comment)]
+                               [color (or/c 'default
+                                            'black
+                                            'white
+                                            'red
+                                            'green
+                                            'blue
+                                            'yellow
+                                            'cyan
+                                            'magenta
+                                            'dark-gray
+                                            'light-gray
+                                            'light-red
+                                            'light-green
+                                            'light-blue
+                                            'light-yellow
+                                            'light-cyan
+                                            'light-magenta)])
+            void?]{
+
+Sets the color used for a syntactic category when coloring is enabled.
+The @racket['error] color is used by @racket[expeditor-error-display]
+in addition to being used for invalid tokens.}
+
+@; ----------------------------------------
+
+@section{Expeditor API}
+
+@defproc[(expeditor-open [history (listof string?)]) (or/c eestate? #f)]{
+
+Attempts to start the expeditor. On success, which requires that
+@racket[(current-input-port)] and @racket[(current-output-port)] are
+terminal ports and the terminal configuration is recognized, the
+result is a representation of the terminal state. The result is
+@racket[#f] if the expeditor cannot be initialized.
+
+The @racket[history] argument provides the }
+
+@defproc[(expeditor-close [ee estate?]) (listof string?)]{
+
+Closes the expeditor, relinquishing terminal configuration and
+resources, if any. The result is the expeditor's history as
+initialized by @racket[expeditor-open] and updated by
+@racket[expeditor-read] calls.}
+
+@defproc[(expeditor-read [ee estate?]) any/c]{
+
+Reads input from the terminal. The @racket[ee] argument holds terminal
+state as well as history that is updated during
+@racket[expeditor-read].}
+
+@defproc[(call-with-expeditor [proc ((-> any/c) -> any)]) any]{
+
+Combines @racket[expeditor-open], a call to @racket[proc], and
+@racket[expeditor-close], where the reading procedure passed to
+@racket[proc] can be called any number of times to read input.
+
+Expeditor history is initialized from
+@racket[current-expeditor-history] on open, and the value of
+@racket[current-expeditor-history] is updated with the new history on
+close.}
+
+
+@defproc[(expeditor-configure) void?]{
+
+Sets expeditor parameters based on @racket[current-interaction-info],
+the user's preferences file, and @racket[(expeditor-init-file-path)].
+
+The @racket[current-expeditor-reader] parameter is first set to use
+@racket[current-read-interaction].
+
+then, @racket[expeditor-configure] checks for information via
+@racket[current-interaction-info], currently checking for the
+following keys:
+
+@itemlist[
+
+ @item{@racket['color-lexer] --- Sets
+       @racket[current-expeditor-lexer]. If @racket['color-lexer] is
+       not provided and @racketmodname[syntax-color/racket-lexer
+       #:indirect] is available, then the Racket lexer is installed.}
+
+ @item{@racket['drracket:submit-predicate] --- Sets
+       @racket[current-expeditor-ready-checker].}
+
+ @item{@racket['drracket:paren-matches] --- Sets
+       @racket[current-expeditor-parentheses].}
+
+ @item{@racket['drracket:grouping-position] --- Sets
+       @racket[current-expeditor-grouper].}
+
+ @item{@racket['drracket:indentation] and
+       @racket['drracket:range-indentation] --- Sets
+       @racket[current-expeditor-indenter] based on a combination of
+       both values.}
+
+]
+
+The @racket['expeditor-color-enabled] preference (via
+@racket[get-preference]) determines
+@racket[current-expeditor-color-enabled].
+
+Finally, if the file named by @racket[(expeditor-init-file-path)],
+it is @racket[dynamic-require]d.}
+
+@defproc[(expeditor-init-file-path) path?]{
+
+Returns a path that is used by @racket[expeditor-configure].
+
+If @racket[(find-system-path 'init-dir)] produces a different result
+than @racket[(find-system-path 'home-dir)], then the result is
+@racket[(build-path (find-system-path 'init-dir) "exeditor.rkt")].
+Otherwise, the result is @racket[(build-path (find-system-path
+'home-dir) ".exeditor.rkt")].}
+
+
+@defparam[current-expeditor-reader proc (input-port? . -> . any/c)]{
+
+A parameter that determines the reader used to parse input when an
+entry is accepted. The default function uses @racket[read].}
+
+
+@defparam[current-expeditor-post-skipper proc (input-port? . -> . any/c)]{
+
+A parameter that determines a function used to consume extra
+whitespace after a reader consumes from an accepted entry. The default
+function consumes whitespace.}
+
+
+@defparam[current-expeditor-lexer proc procedure?]{
+
+A parameter that determines the lexer used for syntax coloring and
+parenthesis matching. @see-dr["Syntax_Coloring"] The default function
+simply recognizes common parenthesis-like characters.}
+
+
+@defparam[current-expeditor-ready-checker proc procedure?]{
+
+A parameter that determines how expeditor entry is treated as ready to
+accept or not. @see-dr["REPL_Submit_Predicate"] The default function
+attempts to @racket[read] all input, returning @racket[#f] only if
+@racket[exn:fail:read:eof] is raised.}
+
+@defparam[current-expeditor-parentheses pairs (listof (list/c symbol? symbol?))]{
+
+A parameter that determines character sequences that are considered
+matching opener and closer pairs. @see-dr["Indentation"]
+The default is @racket['((|(| |)|) (|[| |]|) (|{| |}|))].}
+
+@defparam[current-expeditor-grouper proc procedure?]{
+
+A parameter that determines how expression-based navigation operators
+work. @see-dr["Keystrokes"]}
+
+@defparam[current-expeditor-indenter proc procedure?]{
+
+A parameter that determines how automatic indentation works.
+@see-dr["Indentation"].}
+
+@defparam[current-expeditor-color-enabled on? boolean?]{
+
+A parameter that determines whether syntax and error coloring are
+enabled.}
+
+@defparam[current-expeditor-history strs (listof string?)]{
+
+Expeditor history as consumed and produced by
+@racket[call-with-expeditor].}
+
+@defproc[(expeditor-error-display [s string?]) void?]{
+
+Similar to @racket[display] of @racket[s], but when color is enabled,
+the string is printed in the error color.}

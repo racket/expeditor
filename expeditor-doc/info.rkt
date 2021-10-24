@@ -2,7 +2,7 @@
 
 (define collection "expeditor")
 
-(define scribblings '(("expeditor.scrbl" () (tool-library))))
+(define scribblings '(("expeditor.scrbl" (multi-page) (tool-library))))
 
 (define build-deps '("scribble-lib"
                      "expeditor-lib"

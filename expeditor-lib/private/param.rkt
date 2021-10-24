@@ -14,7 +14,6 @@
          ee-noisy
          ee-standard-indent
          ee-history-limit
-         current-expeditor-during-read-evt
          current-expeditor-lexer
          current-expeditor-reader
          current-expeditor-parentheses
@@ -85,13 +84,6 @@
         (error 'ee-history-length "~s is not a nonnegative fixnum" x))
       x)))
 
-(define current-expeditor-during-read-evt
-  (make-parameter never-evt
-                  (lambda (x)
-                    (unless (evt? x)
-                      (raise-argument-error 'current-expeditor-during-read-evt "evt?" x))
-                    x)))
-
 (define current-expeditor-lexer
   (make-parameter (lambda (ip)
                     (define start (add1 (file-position ip)))
@@ -110,7 +102,18 @@
 (define current-expeditor-parentheses
   (make-parameter '((|(| |)|)
                     (|[| |]|)
-                    (|{| |}|))))
+                    (|{| |}|))
+                  (lambda (p)
+                    (unless (and (list? p)
+                                 (andmap (lambda (v)
+                                           (and (list? v)
+                                                (= 2 (length v))
+                                                (symbol? (car v))
+                                                (symbol? (cadr v))))
+                                         p))
+                      (raise-argument-error 'current-expeditor-parentheses
+                                            "(listof (list/c symbol? symbol?))"))
+                     p)))
 
 (define current-expeditor-reader
   (make-parameter (lambda (ip)

@@ -19,8 +19,11 @@
          expeditor-read
 
          expeditor-configure
+         expeditor-init-file-path
 
          expeditor-error-display
+
+         current-expeditor-history
 
          current-expeditor-lexer
          current-expeditor-ready-checker
@@ -29,9 +32,86 @@
          current-expeditor-parentheses
          current-expeditor-grouper
          current-expeditor-indenter
-         current-expeditor-color-enabled
+         current-expeditor-color-enabled)
 
-         current-expeditor-during-read-evt)
+(module+ configure
+  (provide expeditor-set-syntax-color!
+           expeditor-bind-key!
+
+           eestate?
+           entry?
+
+           ee-insert-self
+           ee-insert-self/paren
+           make-ee-insert-string
+
+           ee-accept
+
+           ee-newline
+           ee-newline/accept
+           ee-open-line
+
+           ee-indent
+           ee-indent-all
+
+           ee-id-completion
+           ee-id-completion/indent
+           ee-next-id-completion
+
+           ee-backward-char
+           ee-forward-char
+           ee-next-line
+           ee-previous-line
+           ee-forward-word
+           ee-forward-exp
+           ee-backward-word
+           ee-backward-exp
+           ee-upward-exp
+           ee-downward-exp
+           ee-backward-page
+           ee-forward-page
+
+           ee-beginning-of-line
+           ee-end-of-line
+           ee-beginning-of-entry
+           ee-end-of-entry
+           
+           ee-goto-matching-delimiter
+           ee-flash-matching-delimiter
+
+           ee-transpose-word
+           ee-transpose-exp
+
+           ee-exchange-point-and-mark
+           ee-set-mark
+
+           ee-delete-char
+           ee-backward-delete-char
+           ee-delete-line
+           ee-delete-to-eol
+           ee-delete-between-point-and-mark-or-backward
+           ee-delete-entry
+           ee-reset-entry
+           ee-reset-entry/break
+           ee-delete-word
+           ee-delete-exp
+           ee-backward-delete-exp
+           ee-yank-selection
+           ee-yank-kill-buffer
+           ee-eof
+           ee-eof/delete-char
+
+           ee-redisplay
+
+           ee-history-bwd
+           ee-history-fwd
+           ee-history-bwd-prefix
+           ee-history-bwd-contains
+           ee-history-fwd-prefix
+           ee-history-fwd-contains
+
+           ee-command-repeat
+           ee-suspend-process))
 
 ;;; Based on:
 ;;;
@@ -90,7 +170,7 @@
     (when (ee-noisy) (bell))))
 
 (define-public (ee-read)
-  (define bars-around-read-errors? #f)
+  (define bars-around-read-errors? #t)
   
   (define (accept ee entry kf #:newline? [newline? #t])
     (let* ([str (entry->string entry)]
@@ -154,7 +234,7 @@
         (let ([c (ee-read-char)])
           (let ([x (if (eof-object? c)
                        (lambda (ee entry c) eof)
-                       (hash-ref table c (lambda () ee-insert-self)))])
+                       (hash-ref table c (lambda () ee-insert-self/paren)))])
             (cond
               [(procedure? x)
                (let ([n (eestate-repeat-count ee)])
@@ -285,7 +365,7 @@
               (eestate-cc? ee))
          (next-completion ee entry)
          entry]
-        [(and (or (eq? (eestate-last-op ee) ee-insert-self)
+        [(and (or (eq? (eestate-last-op ee) ee-insert-self/paren)
                   (eq? (eestate-last-op ee) ee-next-id-completion/indent))
               (let-values ([(prefix suffix*) (id-completions ee entry)])
                 (and prefix suffix*))) =>
@@ -319,23 +399,26 @@
                   (loop (fx+ j 1))))))
         (carriage-return)
         (line-feed))
-      (let ([v (make-vector (if (fx= nlong 0) trows (fx+ trows 1)))])
-        (do ([i 0 (fx+ i 1)])
-            ((fx= i (vector-length v)))
-          (vector-set! v i (make-vector tcols #f)))
-        (let f ([s* s*] [i 0] [j 0] [nlong nlong])
-          (unless (null? s*)
-            (if (fx= i (if (fx> nlong 0) (fx+ trows 1) trows))
-                (f s* 0 (fx+ j 1) (fx- nlong 1))
-                (begin
-                  (vector-set! (vector-ref v i) j (car s*))
-                  (f (cdr s*) (fx+ i 1) j nlong)))))
-        (do ([i 0 (fx+ i 1)])
-            ((fx= i trows))
-          (display-row (vector-ref v i) (fx- tcols 1)))
-        (unless (fx= nlong 0)
-          (display-row (vector-ref v trows) (fx- nlong 1)))
-        (if (fx= nlong 0) trows (fx+ trows 1)))))
+      (set-fg-color identifier-color)
+      (begin0
+        (let ([v (make-vector (if (fx= nlong 0) trows (fx+ trows 1)))])
+          (do ([i 0 (fx+ i 1)])
+              ((fx= i (vector-length v)))
+            (vector-set! v i (make-vector tcols #f)))
+          (let f ([s* s*] [i 0] [j 0] [nlong nlong])
+            (unless (null? s*)
+              (if (fx= i (if (fx> nlong 0) (fx+ trows 1) trows))
+                  (f s* 0 (fx+ j 1) (fx- nlong 1))
+                  (begin
+                    (vector-set! (vector-ref v i) j (car s*))
+                    (f (cdr s*) (fx+ i 1) j nlong)))))
+          (do ([i 0 (fx+ i 1)])
+              ((fx= i trows))
+            (display-row (vector-ref v i) (fx- tcols 1)))
+          (unless (fx= nlong 0)
+            (display-row (vector-ref v trows) (fx- nlong 1)))
+          (if (fx= nlong 0) trows (fx+ trows 1)))
+        (set-fg-color default-color))))
 
   (define (common-prefix s*)
     (let outer ([s1 (car s*)] [s* (cdr s*)])
@@ -390,7 +473,7 @@
                    (redisplay ee entry (max (fx- (screen-rows) nrows 1) 1))))
                (beep "id-completion: no completions found")))
          entry]
-        [(and (or (eq? (eestate-last-op ee) ee-insert-self)
+        [(and (or (eq? (eestate-last-op ee) ee-insert-self/paren)
                   (eq? (eestate-last-op ee) ee-id-completion/indent))
               (let-values ([(prefix suffix*) (id-completions ee entry)])
                 (and prefix suffix*))) =>
@@ -420,16 +503,23 @@
              (define color
                (case type
                  [(error) error-color]
-                 [(opener closer hash-colon-keyword) red-color]
-                 [(string text constant) green-color]
-                 [(symbol) light-blue-color]
-                 [(comment) yellow-color]
+                 [(opener closer hash-colon-keyword) paren-color]
+                 [(string text constant) literal-color]
+                 [(symbol) identifier-color]
+                 [(comment) comment-color]
                  [else default-color]))
              (for ([i (in-range start end)])
                (vector-set! colors i color))
              (loop new-state)]))))))
 
 (define ee-insert-self
+  (lambda (ee entry c)
+    (unless ((char->integer c) . < . 32) ; don't insert control characters
+      (add-char ee entry c)
+      (recolor ee entry))
+    entry))
+
+(define ee-insert-self/paren
   (lambda (ee entry c)
     (cond
       [(for/or ([p (in-list (current-expeditor-parentheses))])
@@ -438,10 +528,7 @@
                (eqv? c (string-ref s (sub1 (string-length s)))))))
        (ee-insert-paren ee entry c)]
       [else
-       (unless ((char->integer c) . < . 32) ; don't insert control characters
-         (add-char ee entry c)
-         (recolor ee entry))
-       entry])))
+       (ee-insert-self ee entry c)])))
 
 (define ee-command-repeat
   (lambda (ee entry c)
@@ -898,7 +985,7 @@
     (recolor ee entry)
     entry))
 
-(define ee-string-macro
+(define make-ee-insert-string
   (lambda (str)
     (lambda (ee entry c)
       (insert-string-before ee entry str)
@@ -1067,7 +1154,7 @@
 
 ;;; key bindings
 
-;;; (ee-bind-key key ee-xxx)
+;;; (expeditor-bind-key! key ee-xxx)
 
 ;;; key must evaluate to a <key>, where:
 ;;;
@@ -1098,20 +1185,20 @@
 ;;;   "\\^"       \^        caret        94
 ;;;   "a"         a         letter 'a'   97
 
-(define-public (dispatch-table? base-dispatch-table ee-bind-key)
+(define-public (dispatch-table? base-dispatch-table expeditor-bind-key!)
   (define make-dispatch-table
     (lambda ()
       (make-hasheqv)))
 
   (define dispatch-table? hash?)
 
-  (define ee-bind-key
+  (define expeditor-bind-key!
     (lambda (key proc)
       (unless (or (char? key)
                   (and (string? key) (fx> (string-length key) 0)))
-        (error 'ee-bind-key "~s is not a valid key (character or nonempty string)" key))
+        (error 'expeditor-bind-key! "~s is not a valid key (character or nonempty string)" key))
       (unless (procedure? proc)
-        (error 'ee-bind-key "~s is not a procedure" proc))
+        (error 'expeditor-bind-key! "~s is not a procedure" proc))
 
       (if (string? key)
           (let* ([n (string-length key)])
@@ -1123,21 +1210,21 @@
                   [else (s-lookup table (fx+ i 1) c)])))
             (define (s-backslash table i)
               (when (fx= i n)
-                (error 'ee-bind-key
+                (error 'expeditor-bind-key!
                   "malformed key ~s (nothing following \\)"
                   key))
               (let ([c (string-ref key i)])
                 (case c
                   [(#\e) (s-lookup table (fx+ i 1) #\u1B)]
                   [(#\\ #\^) (s-lookup table (fx+ i 1) c)]
-                  [else (error 'ee-bind-key
+                  [else (error 'expeditor-bind-key!
                          "malformed key ~s (unexpected character following \\)"
                          key)])))
             (define (s-caret table i)
               (define (^char c)
                 (integer->char (fxand (char->integer c) #b11111)))
               (when (fx= i n)
-                (error 'ee-bind-key
+                (error 'expeditor-bind-key!
                   "malformed key ~s (nothing following ^)"
                   key))
               (s-lookup table (fx+ i 1) (^char (string-ref key i))))
@@ -1147,14 +1234,14 @@
                   [(fx= i n)
                    (when (dispatch-table? x)
                      (log-warning
-                       "ee-bind-key: definition for key ~s disables its use as a prefix"
+                       "expeditor-bind-key!: definition for key ~s disables its use as a prefix"
                        key))
                    (hash-set! table key proc)]
                   [(dispatch-table? x) (s0 x i)]
                   [else
                    (when (procedure? x)
                      (log-warning
-                       "ee-bind-key: definition for key ~s disables its use as a prefix"
+                       "expeditor-bind-key!: definition for key ~s disables its use as a prefix"
                        key))
                    (let ([x (make-dispatch-table)])
                      (hash-set! table key x)
@@ -1163,7 +1250,7 @@
           (begin
             (when (dispatch-table? (hash-ref base-dispatch-table key #f))
               (log-warning
-                "ee-bind-key: definition for key ~s disables its use as a prefix"
+                "expeditor-bind-key!: definition for key ~s disables its use as a prefix"
                 key))
             (hash-set! base-dispatch-table key proc)))))
 
@@ -1171,11 +1258,11 @@
 
  ; set up self-insertion for space and all printing characters
   (for-each
-    (lambda (c) (ee-bind-key c ee-insert-self))
+    (lambda (c) (expeditor-bind-key! c ee-insert-self/paren))
     (string->list " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"))
 )
 
-(let ([ebk ee-bind-key])
+(let ([ebk expeditor-bind-key!])
  ; newline oper<ations
   (ebk #\return   ee-newline/accept)                  ; Return, ^M
   (ebk "^J"       ee-newline/accept)                  ; ^J
@@ -1272,8 +1359,8 @@
   (ebk "^L"       ee-redisplay)                       ; ^L
 
  ; string macros
- ; (ebk "\\ed"     (ee-string-macro "(define "))       ; Esc-d   ; )
- ; (ebk "\\el"     (ee-string-macro "(lambda "))       ; Esc-l   ; )
+ ; (ebk "\\ed"     (make-ee-insert-string "(define "))       ; Esc-d   ; )
+ ; (ebk "\\el"     (make-ee-insert-string "(lambda "))       ; Esc-l   ; )
 
  ; history keys
   (ebk "\\e^P"    ee-history-bwd)                     ; Esc-^P
@@ -1368,7 +1455,19 @@
                 (and indent
                      (indent t pos)))])))))
   (current-expeditor-color-enabled (get-preference 'expeditor-color-enabled
-                                                   (lambda () #t))))
+                                                   (lambda () #t)))
+  (define init-file (expeditor-init-file-path))
+  (when (file-exists? init-file)
+    (dynamic-require init-file #f)))
+
+(define (expeditor-init-file-path)
+  (define init-dir (find-system-path 'init-dir))
+  (define home-dir (find-system-path 'home-dir))
+  (cond
+    [(equal? init-dir home-dir)
+     (build-path init-dir ".expeditor.rkt")]
+    [else
+     (build-path init-dir "expeditor.rkt")]))
 
 (define (expeditor-error-display obj)
   (when (current-expeditor-color-enabled)
