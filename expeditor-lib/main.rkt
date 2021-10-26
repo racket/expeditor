@@ -79,6 +79,7 @@
            ee-goto-matching-delimiter
            ee-flash-matching-delimiter
 
+           ee-transpose-char
            ee-transpose-word
            ee-transpose-exp
 
@@ -887,7 +888,61 @@
       [(null-entry? entry) (break-thread (current-thread))]
       [else (ee-reset-entry ee entry c)])))
 
-(define-public (ee-transpose-word ee-transpose-exp)
+(define-public (ee-transpose-char ee-transpose-word ee-transpose-exp)
+  (define (do-transpose ee entry pre-pos pre-end-pos post-pos post-end-pos)
+    (define delta (string-length (entry->string entry
+                                                #:from-row (pos-row pre-end-pos)
+                                                #:from-col (pos-col pre-end-pos)
+                                                #:up-to-row (pos-row post-pos)
+                                                #:up-to-col (pos-col post-pos))))
+    (goto ee entry post-pos)
+    (define post (delete-forward ee entry (pos-row post-end-pos) (pos-col post-end-pos)))
+    (goto ee entry pre-pos)
+    (define pre (delete-forward ee entry (pos-row pre-end-pos) (pos-col pre-end-pos)))
+    (insert-strings-before ee entry post)
+    (move-forward ee entry delta)
+    (insert-strings-before ee entry pre)
+    (recolor ee entry))
+  
+  (define ee-transpose-char
+    (lambda (ee entry c)
+      (define row (entry-row entry))
+      (define col (entry-col entry))
+      (define end? (end-of-line? ee entry))
+      (cond
+        [(and (= row 0) (= col 0))
+         (beep "no previous character to transpose")]
+        [(and end? (col . > . 1))
+         ;; transpose two previous characters
+         (do-transpose ee entry
+                       (make-pos row (- col 2))
+                       (make-pos row (- col 1))
+                       (make-pos row (- col 1))
+                       (make-pos row col))]
+        [(and end? (= row 0))
+         (beep "no previous character to transpose")]
+        [(and end? (= col 0))
+         (beep "no previous character on line to transpose")]
+        [(or (= col 0)
+             (and end? (= col 1)))
+         ;; swap char and previous newline
+         (when (= col 1) (move-left ee entry))
+         (define post (delete-forward ee entry row 1))
+         (move-up ee entry)
+         (move-eol ee entry)
+         (insert-strings-before ee entry post)
+         (when (= col 1)
+           (move-down ee entry)
+           (move-bol ee entry))
+         (recolor ee entry)]
+        [else
+         (do-transpose ee entry
+                       (make-pos row (- col 1))
+                       (make-pos row col)
+                       (make-pos row col)
+                       (make-pos row (+ col 1)))])
+      entry))
+  
   (define (make-transpose find-next-backward find-next-forward)
     (lambda (ee entry c)
       (let* ([pre-end-pos (find-whitespace-start ee entry
@@ -900,23 +955,11 @@
                                               (pos-row post-pos) (pos-col post-pos))])
         (cond
           [(and pre-pos post-end-pos)
-           (define delta (string-length (entry->string entry
-                                                       #:from-row (pos-row pre-end-pos)
-                                                       #:from-col (pos-col pre-end-pos)
-                                                       #:up-to-row (pos-row post-pos)
-                                                       #:up-to-col (pos-col post-pos))))
-           (goto ee entry post-pos)
-           (define post (delete-forward ee entry (pos-row post-end-pos) (pos-col post-end-pos)))
-           (goto ee entry pre-pos)
-           (define pre (delete-forward ee entry (pos-row pre-end-pos) (pos-col pre-end-pos)))
-           (insert-strings-before ee entry post)
-           (move-forward ee entry delta)
-           (insert-strings-before ee entry pre)
-           (recolor ee entry)]
+           (do-transpose ee entry pre-pos pre-end-pos post-pos post-end-pos)]
           [else
            (beep "start or end not found")]))
       entry))
-  
+
   (define ee-transpose-word
     (make-transpose find-previous-word find-next-word))
   (define ee-transpose-exp
@@ -1331,7 +1374,8 @@
   (ebk "\\e]"     ee-goto-matching-delimiter)         ; Esc-]
   (ebk "^]"       ee-flash-matching-delimiter)        ; ^]
 
-  (ebk "^T"       ee-transpose-word)                  ; ^T
+  (ebk "^T"       ee-transpose-char)                  ; ^T
+  (ebk "\\et"     ee-transpose-word)                  ; Esc-T
   (ebk "\\e^T"    ee-transpose-exp)                   ; Esc-^T
 
  ; destructive functions

@@ -7,7 +7,7 @@
                      (submod expeditor configure)
                      racket/file))
 
-@(define (onekey s) (regexp-replace #rx"\\^" (regexp-replace #rx"Esc-" s "Meta-") "Ctl-"))
+@(define (onekey s) (regexp-replace* #rx"\\^" (regexp-replace #rx"Esc-" s "Meta-") "Ctl-"))
 @(define (binding-table . keys) (apply itemlist  keys))
 @(define (key* keys proc . content)
    (item (elemtag
@@ -17,7 +17,7 @@
               (add-between (map onekey keys) " or ")))
          " --- "
          content
-         "(Implementation: " proc ")"))
+         " (Implementation: " proc ")"))
 @(define-syntax-rule (key keys proc . content) (key* 'keys @racket[proc] . content))
 
 @(define (subsection* s) (subsection #:style '(unnumbered) s))
@@ -122,10 +122,10 @@ require holding the Shift key).
   @key[("End" "^E") ee-end-of-line]{Moves the cursor to the
        end of the current line.}
 
-  @key[("PageUp" "^X[") ee-backward-page]{Moves the cursor up to the
+  @key[("PageUp" "^X [") ee-backward-page]{Moves the cursor up to the
        previous page.}
        
-  @key[("PageDown" "^X]") ee-backward-page]{Moves the cursor down to the
+  @key[("PageDown" "^X ]") ee-backward-page]{Moves the cursor down to the
        next page.}
 
   @key["Esc-<" ee-beginning-of-entry]{Moves the cursor to the
@@ -159,7 +159,7 @@ require holding the Shift key).
   @key[("Esc-^D") ee-downward-exp]{Moves the cursor downward/inward
        one language-specific expression.}
 
-  @key["^X-^X" ee-exchange-point-and-mark]{Moves the cursor to the
+  @key["^X ^X" ee-exchange-point-and-mark]{Moves the cursor to the
        location of the @tech{mark} while setting the @tech{mark} to
        the cursor's current position.}
 
@@ -219,7 +219,7 @@ require holding the Shift key).
   
   @key[("^C") ee-reset-entry/break]{Deletes the full content of the editor
        region, and also moves to the end of the history---unless the editor
-       region is empty, in which case a break signal is sent to the current
+       region is empty, in which case sends a break signal to the current
        thread.}
 
   @key[("Esc-d") ee-delete-word]{Deletes one whitespace-delimited word
@@ -248,7 +248,11 @@ require holding the Shift key).
   @key["^V" ee-yank-selection]{Inserts the content of the system
        clipboard.}
 
-  @key["^T" ee-transpose-word]{Transposes space-delimited words to the
+  @key["^T" ee-transpose-char]{Transposes characters to left and right
+       of the cursor---unless the cursor is at the end of a line, in
+       which case transposes the previous two characters.}
+
+  @key["Esc-t" ee-transpose-word]{Transposes space-delimited words to the
        left and right of the cursor.}
 
   @key["Esc-^T" ee-transpose-exp]{Transposes language-specific
@@ -436,11 +440,12 @@ of tabbing.}
 @keyproc[ee-goto-matching-delimiter]{@see-key["Esc-]"]}
 @keyproc[ee-flash-matching-delimiter]{@see-key["^]"]}
 
-@keyproc[ee-transpose-word]{@see-key["^T"]}
+@keyproc[ee-transpose-char]{@see-key["^T"]}
+@keyproc[ee-transpose-word]{@see-key["Esc-t"]}
 @keyproc[ee-transpose-exp]{@see-key["Esc-^T"]}
 
 @keyproc[ee-set-mark]{@see-key["^@"]}
-@keyproc[ee-exchange-point-and-mark]{@see-key["^X-^X"]}
+@keyproc[ee-exchange-point-and-mark]{@see-key["^X ^X"]}
 
 @keyproc[ee-delete-char]{@see-key["Delete"]}
 @keyproc[ee-backward-delete-char]{@see-key["Backspace"]}
