@@ -90,6 +90,12 @@
       (or (hash-ref paragraph-starts para #f)
           (error 'paragraph-start-position "lookup failed: ~e" para)))
 
+    (define/public (paragraph-end-position para)
+      (define n (hash-ref paragraph-starts (add1 para) #f))
+      (if n
+          (sub1 n)
+          (last-position)))
+
     (define/public (backward-match pos cutoff)
       (let loop ([pos (sub1 pos)] [depth -1] [need-close? #t])
         (cond
