@@ -60,10 +60,13 @@
     (define/public (get-text s e)
       (substring content s e))
 
+    (define/private (get-token who pos)
+      (or (hash-ref mapping pos #f)
+          (hash-ref mapping (sub1 pos) #f) ; make end position work
+          (error who "lookup failed: ~e" pos)))
+
     (define/public (classify-position* pos)
-      (define t (or (hash-ref mapping pos #f)
-                    (hash-ref mapping (sub1 pos) #f) ; make end position work
-                    (error 'classify-position "lookup failed: ~e" pos)))
+      (define t (get-token 'classify-position pos))
       (token-type t))
 
     (define/public (classify-position pos)
@@ -78,6 +81,10 @@
           (values (token-start t)
                   (token-end t))
           (values #f #f)))
+
+    (define/private (get-paren pos)
+      (define t (get-token 'get-parent pos))
+      (token-paren t))
 
     (define/public (last-position)
       (string-length content))
@@ -105,7 +112,7 @@
            (define category (classify-position pos))
            (case category
              [(parenthesis)
-              (define sym (string->symbol (get-text s e)))
+              (define sym (get-paren s))
               (let paren-loop ([parens (current-expeditor-parentheses)])
                 (cond
                   [(null? parens) #f]
@@ -133,7 +140,7 @@
            (define category (classify-position pos))
            (case category
              [(parenthesis)
-              (define sym (string->symbol (get-text s e)))
+              (define sym (get-paren s))
               (let paren-loop ([parens (current-expeditor-parentheses)])
                 (cond
                   [(null? parens) #f]
