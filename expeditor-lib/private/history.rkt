@@ -44,7 +44,9 @@
   (lambda (ls)
     (let ([n (ee-history-limit)])
       (if (> (length ls) n)
-          (list-ref ls n)
+          (for/list ([s (in-list ls)]
+                     [i (in-range n)])
+            s)
           ls))))
 
 (define update-history!
