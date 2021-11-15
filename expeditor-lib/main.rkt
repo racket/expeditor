@@ -159,10 +159,10 @@
         [(not s) s]
         [(string? s)
          (if (string=? s "")
-             (build-path (find-system-path 'pref-dir) ".epeditor_history")
+             (build-path (find-system-path 'pref-dir) ".expeditor_history")
              s)]
         [else (error '$expeditor-history-file "~s is not #f or a string" s)]))))
-          
+
 (define beep
   (lambda (str . arg*)
     #;(with-output-to-file "/tmp/ee.log"
