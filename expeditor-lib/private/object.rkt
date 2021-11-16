@@ -60,6 +60,11 @@
     (define/public (get-text s e)
       (substring content s e))
 
+    (define/public (get-character s)
+      (if (s . >= . (string-length content))
+          #\nul
+          (string-ref content s)))
+
     (define/private (get-token who pos)
       (or (hash-ref mapping pos #f)
           (hash-ref mapping (sub1 pos) #f) ; make end position work
@@ -83,7 +88,7 @@
           (values #f #f)))
 
     (define/private (get-paren pos)
-      (define t (get-token 'get-parent pos))
+      (define t (get-token 'get-paren pos))
       (token-paren t))
 
     (define/public (last-position)
@@ -104,32 +109,52 @@
           (last-position)))
 
     (define/public (backward-match pos cutoff)
-      (let loop ([pos (sub1 pos)] [depth -1] [need-close? #t])
+      (backward-matching-search pos cutoff 'one))
+
+    (define/public (backward-containing-sexp pos cutoff)
+      (backward-matching-search pos cutoff 'all))
+
+    (define/private (backward-matching-search init-pos cutoff mode)
+      (let loop ([pos (sub1 init-pos)] [depth (if (eq? mode 'one) -1 0)] [need-close? (eq? mode 'one)])
         (cond
           [(pos . < . 0) #f]
           [else
            (define-values (s e) (get-token-range pos))
-           (define category (classify-position pos))
-           (case category
-             [(parenthesis)
-              (define sym (get-paren s))
+           (define sym (get-paren s))
+           (cond
+             [sym
               (let paren-loop ([parens (current-expeditor-parentheses)])
                 (cond
                   [(null? parens) #f]
                   [(eq? sym (caar parens))
                    (and (not need-close?)
                         (if (= depth 0)
-                            s
+                            (cond
+                              [(eq? mode 'all)
+                               ;; color:text% method skips back over whitespace, but
+                               ;; doesn't go beyond the starting position
+                               (min (skip-whitespace e 'forward #f)
+                                    init-pos)]
+                              [else #f])
                             (loop (sub1 s) (sub1 depth) #f)))]
                   [(eq? sym (cadar parens))
-                   (loop (sub1 s) (add1 depth) #f)]
+                   (cond
+                     [(e . > . init-pos)
+                      ;; started in middle of closer
+                      (if (eq? mode 'one)
+                          s
+                          (loop (sub1 s) depth #f))]
+                     [else (loop (sub1 s) (add1 depth) #f)])]
                   [else
                    (paren-loop (cdr parens))]))]
-             [(whitespace comment)
-              (loop (sub1 s) depth need-close?)]
-             [else (if need-close?
-                       s
-                       (loop (sub1 s) depth #f))])])))
+             [else
+              (define category (classify-position pos))
+              (case category
+                [(white-space comment)
+                 (loop (sub1 s) depth need-close?)]
+                [else (if need-close?
+                          s
+                          (loop (sub1 s) depth #f))])])])))
 
     (define/public (forward-match pos cutoff)
       (let loop ([pos pos] [depth 0])
@@ -137,20 +162,57 @@
         (cond
           [(not s) #f]
           [else
-           (define category (classify-position pos))
-           (case category
-             [(parenthesis)
-              (define sym (get-paren s))
+           (define sym (get-paren s))
+           (cond
+             [sym
               (let paren-loop ([parens (current-expeditor-parentheses)])
                 (cond
                   [(null? parens) #f]
                   [(eq? sym (caar parens))
-                   (loop e (add1 depth))]
+                   (if (eqv? pos s) ; don't count the middle of a parenthesis token
+                       (loop e (add1 depth))
+                       e)]
                   [(eq? sym (cadar parens))
-                   (if (depth . <= . 1)
-                       e
-                       (loop e (sub1 depth)))]
+                   (cond
+                     [(depth . <= . 0) #f]
+                     [(depth . = . 1) e]
+                     [else (loop e (sub1 depth))])]
                   [else
                    (paren-loop (cdr parens))]))]
              [else
-              (loop e depth)])])))))
+              (define category (classify-position pos))
+              (case category
+                [(white-space comment) (loop e depth)]
+                [else
+                 (if (zero? depth)
+                     e ;; didn't find paren to match, so finding token end
+                     (loop e depth))])])])))
+
+    (define/public (skip-whitespace pos dir comments?)
+      (define (skip? category)
+        (or (eq? category 'white-space)
+            (and comments? (eq? category 'comment))))
+      (case dir
+        [(forward)
+         (let loop ([pos pos])
+           (define category (classify-position pos))
+           (cond
+             [(skip? category)
+              (define-values (s e) (get-token-range pos))
+              (if e
+                  (loop e)
+                  pos)]
+             [else pos]))]
+        [(backward)
+         (cond
+           [(zero? pos) 0]
+           [else
+            (let loop ([pos (sub1 pos)] [end-pos pos])
+              (define category (classify-position pos))
+              (cond
+                [(skip? category)
+                 (define-values (s e) (get-token-range pos))
+                 (loop (sub1 s) s)]
+                [else end-pos]))])]
+        [else
+         (error 'skip-whitespace "bad direction: ~e" dir)]))))
