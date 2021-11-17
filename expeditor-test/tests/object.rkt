@@ -43,8 +43,8 @@
     (check-equal? (send o forward-match pos lp)
                   (send t forward-match pos lp)
                   (format "forward-match ~v" pos))
-    (check-equal? (send o backward-match pos lp)
-                  (send t backward-match pos lp)
+    (check-equal? (send o backward-match pos 0)
+                  (send t backward-match pos 0)
                   (format "backward-match ~v" pos))
     (check-equal? (send o backward-containing-sexp pos 0)
                   (send t backward-containing-sexp pos 0)
@@ -68,6 +68,10 @@
 (define at-exp-racket-str
   "#lang at-exp racket\n(1) word #(2) #hash((1 . 2))\n@racket[]|{\n#(2)\n}|\n")
 
+'default-empty
+(check "" default-lexer racket:default-paren-matches)
+'default-simple
+(check "((1) (2))" default-lexer racket:default-paren-matches)
 'default
 (check at-exp-racket-str default-lexer racket:default-paren-matches)
 'racket

@@ -1459,6 +1459,9 @@
         (apply values val*)))))
 
 (define (expeditor-configure)
+  (define (collection-file? file coll)
+    (define f (collection-file-path file coll #:fail (lambda (err) #f)))
+    (and f (file-exists? f)))
   (define info (let ([vec (current-interaction-info)])
                  (if vec
                      ((dynamic-require (vector-ref vec 0)
@@ -1468,7 +1471,7 @@
   (current-expeditor-reader
    (lambda (in) ((current-read-interaction) (object-name in) in)))
   (let ([lexer (or (info 'color-lexer #f)
-                   (and (collection-file-path "racket-lexer.rkt" "syntax-color")
+                   (and (collection-file? "racket-lexer.rkt" "syntax-color")
                         (dynamic-require 'syntax-color/racket-lexer 'racket-lexer)))])
     (current-expeditor-lexer lexer))
   (let ([pred (info 'drracket:submit-predicate #f)])
@@ -1481,8 +1484,11 @@
   (let ([group (info 'drracket:grouping-position #f)])
     (when group
       (current-expeditor-grouper group)))
-  (let ([indent (info 'drracket:indentation #f)]
-        [indent-range (info 'drracket:range-indentation #f)])
+  (let* ([indent-range (info 'drracket:range-indentation #f)]
+         [indent (or (info 'drracket:indentation #f)
+                     (and (not indent-range)
+                          (collection-file? "racket-indentation.rkt" "syntax-color")
+                          (dynamic-require 'syntax-color/racket-indentation 'racket-amount-to-indent)))])
     (when (or indent indent-range)
       (current-expeditor-indenter
        (lambda (t pos auto?)

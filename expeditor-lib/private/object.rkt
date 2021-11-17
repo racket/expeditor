@@ -114,10 +114,15 @@
     (define/public (backward-containing-sexp pos cutoff)
       (backward-matching-search pos cutoff 'all))
 
+
     (define/private (backward-matching-search init-pos cutoff mode)
-      (let loop ([pos (sub1 init-pos)] [depth (if (eq? mode 'one) -1 0)] [need-close? (eq? mode 'one)])
+      (define start-pos (if (and (eq? mode 'all)
+                                 (init-pos . <= . cutoff))
+                            cutoff
+                            (sub1 init-pos)))
+      (let loop ([pos start-pos] [depth (if (eq? mode 'one) -1 0)] [need-close? (eq? mode 'one)])
         (cond
-          [(pos . < . 0) #f]
+          [(pos . < . cutoff) #f]
           [else
            (define-values (s e) (get-token-range pos))
            (define sym (get-paren s))
@@ -135,7 +140,7 @@
                                ;; doesn't go beyond the starting position
                                (min (skip-whitespace e 'forward #f)
                                     init-pos)]
-                              [else #f])
+                              [else s])
                             (loop (sub1 s) (sub1 depth) #f)))]
                   [(eq? sym (cadar parens))
                    (cond
@@ -215,4 +220,6 @@
                  (loop (sub1 s) s)]
                 [else end-pos]))])]
         [else
-         (error 'skip-whitespace "bad direction: ~e" dir)]))))
+         (error 'skip-whitespace "bad direction: ~e" dir)]))
+
+    (define/public (get-backward-navigation-limit pos) 0)))
