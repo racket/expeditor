@@ -2,7 +2,8 @@
 
 (define collection "expeditor")
 
-(define deps '(["base" #:version "8.3.0.3"]))
+(define deps '(["base" #:version "8.3.0.3"]
+               ["syntax-color-lib" #:version "1.3"]))
 
 (define pkg-desc "implementation (no documentation) part of \"expeditor\"")
 

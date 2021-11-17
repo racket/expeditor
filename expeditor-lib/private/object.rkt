@@ -1,5 +1,6 @@
 #lang racket/base
 (require racket/class
+         syntax-color/color-textoid
          "param.rkt")
 
 (provide new-object)
@@ -23,7 +24,7 @@
                   (loop new-state))])))
 
 (define like-text%
-  (class object%
+  (class* object% (color-textoid<%>)
     (init-field content)
 
     (super-new)
