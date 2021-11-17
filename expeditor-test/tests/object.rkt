@@ -24,46 +24,47 @@
       (error "stop"))))
 
 (define (check str lexer paren-matches
-               #:indentation [indentation #f])
-  (define o (parameterize ([current-expeditor-lexer lexer]
-                           [current-expeditor-parentheses paren-matches])
-              (new-object str)))
-  (define t (new color:text%))
-  (send t start-colorer symbol->string lexer paren-matches)
-  (insert t str)
-  (check-equal? (send o last-position)
-                (send t last-position)
-                #f)
+               #:indentation [indentation #f]
+               #:start [start 0])
+  (parameterize ([current-expeditor-parentheses paren-matches])
+    (define o (parameterize ([current-expeditor-lexer lexer])
+                (new-object str)))
+    (define t (new color:text%))
+    (send t start-colorer symbol->string lexer paren-matches)
+    (insert t str)
+    (check-equal? (send o last-position)
+                  (send t last-position)
+                  #f)
 
-  ;; Test that our implementations of {forward backward}-match are
-  ;; equivalent to those of color:text%.
-  (define lp (string-length str))
-  (for ([pos (in-range 0 (string-length str))])
-    (send t set-position pos pos)
-    (check-equal? (send o forward-match pos lp)
-                  (send t forward-match pos lp)
-                  (format "forward-match ~v" pos))
-    (check-equal? (send o backward-match pos 0)
-                  (send t backward-match pos 0)
-                  (format "backward-match ~v" pos))
-    (check-equal? (send o backward-containing-sexp pos 0)
-                  (send t backward-containing-sexp pos 0)
-                  (format "backward-containing-sexp ~v" pos))
-    (for* ([dir (in-list '(forward backward))]
-           [comments? (in-list '(#f #t))])
-      (check-equal? (send o skip-whitespace pos dir comments?)
-                    (send t skip-whitespace pos dir comments?)
-                    (format "skip-whitespace ~v ~v ~v" pos dir comments?))))
+    ;; Test that our implementations of {forward backward}-match are
+    ;; equivalent to those of color:text%.
+    (define lp (string-length str))
+    (for ([pos (in-range start (string-length str))])
+      (send t set-position pos pos)
+      (check-equal? (send o forward-match pos lp)
+                    (send t forward-match pos lp)
+                    (format "forward-match ~v" pos))
+      (check-equal? (send o backward-match pos 0)
+                    (send t backward-match pos 0)
+                    (format "backward-match ~v" pos))
+      (check-equal? (send o backward-containing-sexp pos 0)
+                    (send t backward-containing-sexp pos 0)
+                    (format "backward-containing-sexp ~v" pos))
+      (for* ([dir (in-list '(forward backward))]
+             [comments? (in-list '(#f #t))])
+        (check-equal? (send o skip-whitespace pos dir comments?)
+                      (send t skip-whitespace pos dir comments?)
+                      (format "skip-whitespace ~v ~v ~v" pos dir comments?))))
 
-  ;; Test that we supply enough entire color-text% methods, and that
-  ;; they behave equivalently to from racket-text%, as needed by a
-  ;; lang-supplied drracket:indentation
-  ;; function.
-  (when indentation
-    (for ([pos (in-range 0 (string-length str))])
-      (check-equal? (indentation o pos)
-                    (indentation t pos)
-                    (format "~v ~v" determine-spaces pos)))))
+    ;; Test that we supply enough entire color-text% methods, and that
+    ;; they behave equivalently to from racket-text%, as needed by a
+    ;; lang-supplied drracket:indentation
+    ;; function.
+    (when indentation
+      (for ([pos (in-range 0 (string-length str))])
+        (check-equal? (indentation o pos)
+                      (indentation t pos)
+                      (format "~v ~v" determine-spaces pos))))))
 
 (define at-exp-racket-str
   "#lang at-exp racket\n(1) word #(2) #hash((1 . 2))\n@racket[]|{\n#(2)\n}|\n")
