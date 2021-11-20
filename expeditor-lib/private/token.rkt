@@ -1,16 +1,21 @@
 #lang racket/base
-(require "param.rkt")
+(require syntax-color/lexer-contract
+         "param.rkt")
 
 (provide read-token
          opener->closer)
 
 (define (read-token ip state)
-  (define-values (lexeme orig-type paren start end backup new-state)
+  (define-values (lexeme orig-type paren start end backup new-state/ds)
     (let ([lex (current-expeditor-lexer)])
       (if (procedure-arity-includes? lex 3)
           (lex ip 0 state)
           (let-values ([(lexeme type paren start end) (lex ip)])
             (values lexeme type paren start end 0 #f)))))
+  (define new-state
+    (if (dont-stop? new-state/ds)
+        (dont-stop-val new-state/ds)
+        new-state/ds))
   (define-values (type value)
     (translate-type orig-type paren lexeme))
   (if (eq? type 'white-space)
