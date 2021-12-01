@@ -32,7 +32,8 @@
          current-expeditor-parentheses
          current-expeditor-grouper
          current-expeditor-indenter
-         current-expeditor-color-enabled)
+         current-expeditor-color-enabled
+         current-expeditor-history-whitespace-trim-enabled)
 
 (module+ configure
   (provide expeditor-set-syntax-color!

@@ -23,7 +23,8 @@
          current-expeditor-grouper
          current-expeditor-history
          current-expeditor-indenter
-         current-expeditor-color-enabled)
+         current-expeditor-color-enabled
+         current-expeditor-history-whitespace-trim-enabled)
 
 (define (fxnonnegative? v)
   (and (fixnum? v)
@@ -165,5 +166,9 @@
   (make-parameter (lambda (obj start auto?) #f)))
 
 (define current-expeditor-color-enabled
+  (make-parameter #t
+                  (lambda (v) (and v #t))))
+
+(define current-expeditor-history-whitespace-trim-enabled
   (make-parameter #t
                   (lambda (v) (and v #t))))

@@ -671,6 +671,12 @@ enabled.}
 Expeditor history as consumed and produced by
 @racket[call-with-expeditor].}
 
+@defboolparam[current-expeditor-history-whitespace-trim-enabled on?]{
+
+A parameter that determines whether tailing whitespace is trimmed from
+input before recording it as history. The default is @racket[#t].}
+
+
 @defproc[(expeditor-error-display [s string?]) void?]{
 
 Similar to @racket[display] of @racket[s], but when color is enabled,

@@ -49,6 +49,12 @@
             s)
           ls))))
 
+(define (clean-history-item s)
+  (cond
+    [(current-expeditor-history-whitespace-trim-enabled)
+     (regexp-replace #px"\\s+$" s "")]
+    [else s]))
+
 (define update-history!
   (lambda (ee entry)
     (define (all-whitespace? s)
@@ -57,7 +63,7 @@
           (or (fx= i n)
               (and (memv (string-ref s i) '(#\space #\newline))
                    (f (fx+ i 1)))))))
-    (let ([s (entry->string entry)] [ls (history->list ee)])
+    (let ([s (clean-history-item (entry->string entry))] [ls (history->list ee)])
       (set-eestate-histbwd! ee
                             (if (or (all-whitespace? s)
                                     (and (not (null? ls))
