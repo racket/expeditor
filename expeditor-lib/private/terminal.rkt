@@ -8,6 +8,7 @@
  (protect-out init-term
               $ee-read-char/blocking
               $ee-write-char
+              char-width
               set-color
               ee-flush
               get-screen-size
@@ -35,9 +36,25 @@
               $carriage-return
               line-feed))
 
+;; Cache character widths, especially for Windows, where
+;; `terminal-char-width` can't report the right answer, but
+;; `terminal-write-char` can report information about how
+;; the cursor advanced.
+(define char-widths (make-hasheqv))
+
 (define init-term terminal-init)
 (define $ee-read-char/blocking terminal-read-char)
-(define $ee-write-char terminal-write-char)
+(define $ee-write-char (lambda (c)
+                         (define w (terminal-write-char c))
+                         (hash-set! char-widths c w)
+                         w))
+(define char-width (lambda (c)
+                     ;; we're only set up to handle characters
+                     ;; that are extra-wide; we're assuming that
+                     ;; control characters or 0-width characters are
+                     ;; not relevant, at least for now
+                     (max 1 (or (hash-ref char-widths c #f)
+                                (terminal-char-width c)))))
 (define set-color terminal-set-color)
 (define ee-flush terminal-flush)
 (define get-screen-size terminal-get-screen-size)

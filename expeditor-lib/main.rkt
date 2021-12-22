@@ -285,6 +285,7 @@
                                     (clear-eos)
                                     (ee-flush)
                                     (no-raw-mode)
+                                    #;((error-display-handler) (exn-message exn) exn)
                                     (ee-display-string (exn-message exn))
                                     (ee-write-char #\newline)
                                     (update-history! ee entry)
@@ -1525,7 +1526,8 @@
     (set-fg-color error-color))
   (ee-display-string obj)
   (when (current-expeditor-color-enabled)
-    (set-fg-color default-color)))
+    (set-fg-color default-color)
+    (ee-flush)))
 
 (module+ main
   (port-count-lines! (current-input-port))

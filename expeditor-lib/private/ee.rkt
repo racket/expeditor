@@ -10,7 +10,8 @@
          "param.rkt"
          "token.rkt"
          "object.rkt"
-         "color.rkt")
+         "color.rkt"
+         "wstring.rkt")
 
 ;; See "../main.rkt"
 
@@ -154,23 +155,26 @@
 ;;; newlines appear in the strings themselves.
 ;;; each line also has a vector of colors for the characters in the
 ;;; line's srring.
+;;; each character spans a logcal column, but it may span multiple
+;;; physical columns.
 ;;;
 ;;; lns   := (ln ln ...)  ;;; list of "ln"s
 ;;; ln    := [nsr, str]
-;;; nsr   := integer      ;;; number of screen rows occupied by the line
+;;; nsr   := integer      ;;; number of physical rows occupied by the line
 ;;; str   := string       ;;; contents of the line
 
 ;; arrange for nsr to be updated whenever str is changed
-(struct ln (str nsr colors)
+(struct ln (str nsr colors unicell?)
   #:mutable
   #:authentic
   #:sealed)
 (define (make-ln ee str)
-  (ln str (str->nsr ee str) (str->colors str)))
+  (ln str (str->nsr ee str) (str->colors str) (string-unicell? str)))
 (define (ln-str-set! ee ln str [colors (str->colors str)])
   (set-ln-str! ln str)
   (set-ln-nsr! ln (str->nsr ee str))
-  (set-ln-colors! ln colors))
+  (set-ln-colors! ln colors)
+  (set-ln-unicell?! ln (string-unicell? str)))
 (define ln-nsr-set! set-ln-nsr!)
 
 (define (str->colors str [color default-color])
@@ -276,58 +280,107 @@
 (define (entry-nsr entry) (apply fx+ (map ln-nsr (entry-lns entry))))
 
 ;;; split a logical row into a list of strings each of which will fit
-;;; on a screen line, starting at logical column col.
+;;; on a screen line, starting at logical column col which resides at
+;;; physical column pcol
 (define split-string
-  (lambda (ee str col)
+  (lambda (ee str col pcol)
     (let ([str-len (string-length str)])
-      (let f ([col col] [width (fx- (screen-cols) (col->screen-col ee col))])
-        (if (fx< (fx- str-len col) width)
-            (list (substring str col str-len))
-            (cons (substring str col (fx+ col width))
-                  (f (fx+ col width) (screen-cols))))))))
+      (let f ([col col] [width (fx- (screen-cols) pcol)])
+        (define n (string-fits-width str col width))
+        (if (fx= (fx- str-len col) n)
+            (cons (substring str col)
+                  (if (or (n . fx< . (fx- (string-length str) col))
+                          (fx= width (string-width str col)))
+                      (list "")
+                      null))
+            (cons (substring str col (fx+ col n))
+                  (f (fx+ col n) (screen-cols))))))))
 
-(define split-vector
-  (lambda (ee vec col)
+(define split-vector-like
+  (lambda (ee vec col strs)
     (let ([vec-len (vector-length vec)])
-      (let f ([col col] [width (fx- (screen-cols) (col->screen-col ee col))])
-        (if (fx< (fx- vec-len col) width)
-            (list (vector-copy vec col vec-len))
-            (cons (vector-copy vec col (fx+ col width))
-                  (f (fx+ col width) (screen-cols))))))))
+      (let f ([col col] [strs strs])
+        (cond
+          [(null? strs) null]
+          [else
+           (define len (string-length (car strs)))
+           (cons (vector-copy vec col (fx+ col len))
+                 (f (fx+ col len) (cdr strs)))])))))
 
 (define (screen-lines-between ee entry toprow topoff nextrow nextoff)
   ; returns distance in physical screen lines between physical line
   ; topoff of toprow and nextoff of nextrow
-  (let ([lns (entry-lns entry)])
-    (let f ([i toprow] [off topoff] [lns (list-tail lns toprow)])
-      (if (fx= i nextrow)
-          (fx- nextoff off)
-          (fx+ (fx- (ln-nsr (car lns)) off)
-               (f (fx+ i 1) 0 (cdr lns)))))))
+  (max (let ([lns (entry-lns entry)])
+         (let f ([i toprow] [off topoff] [lns (list-tail lns toprow)])
+           (if (fx= i nextrow)
+               (fx- nextoff off)
+               (fx+ (fx- (ln-nsr (car lns)) off)
+                    (f (fx+ i 1) 0 (cdr lns))))))
+       ;; shouldn't go negative, bust just in case:
+       0))
+
+(define (prompt-width ee)
+  (string-length (eestate-prompt ee)))
 
 (define (str->nsr ee str)
-  (fx+ (col->line-offset ee (string-length str)) 1))
+  ;; we can't just divide by the screen width, because a double-wide
+  ;; character might be at a line boundary
+  (let loop ([i 0] [prompt-len (prompt-width ee)])
+    (define w (fx- (screen-cols) prompt-len))
+    (define n (string-fits-width str i w))
+    (if (fx= n (fx- (string-length str) i))
+        (if (fx= w (string-width str i))
+            2
+            1)
+        (fx+ 1 (loop (fx+ i n) 0)))))
 
-;;; return the line offset based on the column and screen size
-;;;                                      ||-offset=2 (prompt)
-;;; example: if: col         = 15        vv
-;;;              offset      = 2         -----------
-;;;              scrn-cols   = 10       |> line-000| line-offset 0
-;;;          then:                      |line-11111| line-offset 1
-;;;              line-offset = 1                ^column = 15
+;;; return the line offset based on the column and screen size;
+;;; we have to walk the string to handle multicolumn characters
 (define col->line-offset
-  (lambda (ee col)
-    (fxquotient (fx+ (string-length (eestate-prompt ee)) col) (screen-cols))))
+  (lambda (ee entry row col)
+    (define ln (list-ref (entry-lns entry) row))
+    (cond
+      [(ln-unicell? ln)
+       (fxquotient (fx+ (string-length (eestate-prompt ee)) col) (screen-cols))]
+      [else
+       (define str (ln-str ln))
+       (let loop ([i 0] [col col] [offset 0] [prompt-len (prompt-width ee)])
+         (define w (fx- (screen-cols) prompt-len))
+         (define n (string-fits-width str i w))
+         (cond
+           [(fx<= col n)
+            (if (and (fx= col n)
+                     (or (n . fx< . (fx- (string-length str) i))
+                         (fx= w (string-width str i))))
+                (fx+ offset 1)
+                offset)]
+           [else
+            (loop (fx+ i n) (fx- col n) (fx+ offset 1) 0)]))])))
 
-;;; return the actual screen column based on the logical row column
-;;; example: if: col         = 15        vv-offset=2 (prompt)
-;;;              offset      = 2         -----------
-;;;              scrn-cols   = 10       |> line-000| line-offset 0
-;;;          then:                      |line-11111| line-offset 1
-;;;              scrn-col    = 7                ^column = 15
+;;; return the actual screen column based on the logical row column;
+;;; we have to walk the string to handle multicolumn characters
 (define col->screen-col
-  (lambda (ee col)
-    (fxremainder (fx+ col (string-length (eestate-prompt ee))) (screen-cols))))
+  (lambda (ee entry row col)
+    (define ln (list-ref (entry-lns entry) row))
+    (cond
+      [(ln-unicell? ln)
+       (fxremainder (fx+ col (string-length (eestate-prompt ee))) (screen-cols))]
+      [else
+       (define str (ln-str ln))
+       (let loop ([i 0] [col col] [prompt-len (prompt-width ee)])
+         (define w (fx- (screen-cols) prompt-len))
+         (define n (string-fits-width str i w))
+         (cond
+           [(fx<= col n)
+            (if (and (fx= col n)
+                     (or (n . fx< . (fx- (string-length str) i))
+                         (fx= w (string-width str i))))
+                0
+                (let loop ([i i] [col col] [pcol prompt-len])
+                  (if (fx= col 0)
+                      pcol
+                      (loop (fx+ i 1) (fx- col 1) (fx+ pcol (char-width (string-ref str i)))))))]
+           [else (loop (fx+ i n) (fx- col n) 0)]))])))
 
 (define (clear-entry ee entry)
   ; like clear-screen, but clears only from top line of entry
@@ -338,7 +391,7 @@
          (let ([top-line (entry-top-line entry)])
            (screen-lines-between ee entry
                                  (pos-row top-line) (pos-col top-line)
-                                 (entry-row entry) (col->line-offset ee (entry-col entry)))))
+                                 (entry-row entry) (col->line-offset ee entry (entry-row entry) (entry-col entry)))))
         (clear-eos))
       (clear-screen)))
 
@@ -413,56 +466,63 @@
     (set-fg-color default-color)))
 
 (define-public (display-rest/goto)
-  (define (display-rest-of-line ee entry row col clear?)
+  (define (display-rest-of-line ee entry row col pcol clear?)
     ; display as much of the rest of row as will fit on the screen
     (let ([lns (entry-lns entry)] [bot-line (entry-bot-line entry)])
       ; n = number of lines to display beyond the first
+      (define row-str (lns->str lns row))
+      (define strs (split-string ee row-str col pcol))
       (let loop ([n (fx- (if (fx= row (pos-row bot-line))
                              (pos-col bot-line)
                              (fx- (lns->nsr lns row) 1))
-                         (col->line-offset ee col))]
-                 [str-lst (split-string ee (lns->str lns row) col)]
-                 [colors-lst (split-vector ee (lns->colors lns row) col)]
+                         (col->line-offset ee entry row col))]
+                 [str-lst strs]
+                 [colors-lst (split-vector-like ee (lns->colors lns row) col strs)]
                  [current-color default-color]
-                 [new-col col])
+                 [new-col col]
+                 [new-pcol pcol])
         (when clear? (clear-eol))
         (let ([str (car str-lst)]
               [colors (car colors-lst)])
           (let ([current-color (ee-display-string/colors str colors current-color)])
-            (let ([new-col (fx+ new-col (string-length str))])
+            (let ([new-col (fx+ new-col (string-length str))]
+                  [new-pcol (fx+ new-pcol (string-width str))])
               (if (fx= n 0)
                   (begin
                     (finish-color current-color)
-                    new-col)
+                    (values new-col new-pcol))
                   (begin
                     (carriage-return)
                     (line-feed)
-                    (loop (fx- n 1) (cdr str-lst) (cdr colors-lst) current-color new-col)))))))))
+                    (loop (fx- n 1) (cdr str-lst) (cdr colors-lst) current-color new-col new-pcol)))))))))
   
   (define (display-rest-of-entry ee entry)
     (let ([row (entry-row entry)]
           [col (entry-col entry)]
           [bot-row (pos-row (entry-bot-line entry))])
-      (let loop ([new-row row] [start-col col])
-        (let ([new-col (display-rest-of-line ee entry new-row start-col #f)])
+      (define pcol (col->screen-col ee entry row col))
+      (let loop ([new-row row] [start-col col] [start-pcol pcol])
+        (let-values ([(new-col new-pcol) (display-rest-of-line ee entry new-row start-col start-pcol #f)])
           (if (fx= new-row bot-row)
-              (values new-row new-col)
+              (values new-row new-col new-pcol)
               (begin
                 (carriage-return)
                 (line-feed)
                 (ee-display-string (phantom-prompt ee))
-                (loop (fx+ new-row 1) 0)))))))
+                (loop (fx+ new-row 1) 0 0)))))))
   
   (define (display-rest/goto ee entry just-row? clear? to-row to-col)
     ; display rest of entry and go directly from there to (to-row, to-col)
     ; just-row? => only remainder of current logical row needed by displayed
     ; clear? => clear-eos or clear-eol needed
-    (let-values ([(cur-row cur-col)
+    (let-values ([(cur-row cur-col cur-pcol)
                   (if just-row?
-                      (values
-                       (entry-row entry)
-                       (display-rest-of-line ee entry
-                                             (entry-row entry) (entry-col entry) clear?))
+                      (let-values ([(col pcol) (display-rest-of-line
+                                                ee entry
+                                                (entry-row entry) (entry-col entry)
+                                                (col->screen-col ee entry (entry-row entry) (entry-col entry))
+                                                clear?)])
+                        (values (entry-row entry) col pcol))
                       (begin
                         (set-entry-bot-line! entry
                                              (calc-bot-line-displayed entry
@@ -476,11 +536,13 @@
         ; line, move back one so that the cursor is pointing at that character
         ; to avoid returning a column value that would wrongly indicate that
         ; the cursor is at the start of the next screen line
-        (if (and (fx> cur-col 0) (fx= (col->screen-col ee cur-col) 0))
-            (begin
-              (move-cursor-left 1)
-              (set-entry-col! entry (fx- cur-col 1)))
-            (set-entry-col! entry cur-col)))
+        (cond
+          [(and (fx> cur-col 0) (fx= cur-pcol 0))
+           (define adj-pcol (col->screen-col ee entry cur-row (fx- cur-col 1)))
+           (move-cursor-left (- cur-pcol adj-pcol))
+           (set-entry-col! entry (fx- cur-col 1))]
+          [else
+           (set-entry-col! entry cur-col)]))
       (goto ee entry (make-pos to-row to-col)))))
 
 (define-public (display-partial-entry)
@@ -488,8 +550,9 @@
     ; displays physical lines of str from start (inclusive) to end (inclusive)
     ; assumes cursor is at column zero of start line; leaves cursor at
     ; column zero of end line
-    (let ([ls (list-tail (split-string ee str 0) start)]
-          [cs (list-tail (split-vector ee colors 0) start)])
+    (let* ([ls-all (split-string ee str 0 (prompt-width ee))]
+           [ls (list-tail ls-all start)]
+           [cs (list-tail (split-vector-like ee colors 0 ls-all) start)])
       (when (fx= start 0)
         (ee-display-string
          (if (fx= row 0)
@@ -529,7 +592,7 @@
          [top-line (entry-top-line entry)]
          [new-str (lns->str lns new-row)]
          [new-len (string-length new-str)]
-         [new-row-offset (col->line-offset ee new-col)]
+         [new-row-offset (col->line-offset ee entry new-row new-col)]
          [new-row-pos (make-pos new-row new-row-offset)]
          [new-bot-line (calc-bot-line-displayed entry new-row-pos)])
     (cond
@@ -547,9 +610,10 @@
        (move-cursor-up
         (screen-lines-between ee entry
                               new-row new-row-offset
-                              (entry-row entry) (col->line-offset ee (entry-col entry))))
-       (let ([screen-col (col->screen-col ee col)]
-             [new-screen-col (col->screen-col ee new-col)])
+                              (entry-row entry)
+                              (col->line-offset ee entry (entry-row entry) (entry-col entry))))
+       (let ([screen-col (col->screen-col ee entry row col)]
+             [new-screen-col (col->screen-col ee entry new-row new-col)])
          (cond
            [(fx> new-screen-col screen-col)
             (move-cursor-right (fx- new-screen-col screen-col))]
@@ -580,7 +644,7 @@
        (move-cursor-up
         (screen-lines-between ee entry
                               (pos-row top-line) (pos-col top-line)
-                              row (col->line-offset ee col)))
+                              row (col->line-offset ee entry row col)))
        (carriage-return)
        (let ([extra-top-lines
               (screen-lines-between ee entry
@@ -601,7 +665,7 @@
                                       (fx- r 1) (fx- (lns->nsr lns (fx- r 1)) 1))))
          ; move cursor back to top
          (move-cursor-up (fx- extra-top-lines 1)))
-       (move-cursor-right (col->screen-col ee new-col))
+       (move-cursor-right (col->screen-col ee entry new-row new-col))
        (set-entry-col! entry new-col)
        (set-entry-row! entry new-row)
        (set-entry-top-line! entry new-row-pos)
@@ -633,7 +697,7 @@
         (screen-lines-between ee entry
                               new-row new-row-offset
                               (pos-row new-bot-line) (pos-col new-bot-line)))
-       (move-cursor-right (col->screen-col ee new-col))
+       (move-cursor-right (col->screen-col ee entry new-row new-col))
        (set-entry-col! entry new-col)
        (set-entry-row! entry new-row)
        (set-entry-top-line! entry new-row-pos)
@@ -649,7 +713,7 @@
          [bot-line (entry-bot-line entry)]
          [new-str (lns->str lns new-row)]
          [new-len (string-length new-str)]
-         [new-row-offset (col->line-offset ee new-col)]
+         [new-row-offset (col->line-offset ee entry new-row new-col)]
          [new-row-pos (make-pos new-row new-row-offset)]
          [new-top-line (calc-top-line-displayed entry new-row-pos)])
     (cond
@@ -666,10 +730,10 @@
       [(pos<=? new-row-pos bot-line)
        (move-cursor-down
         (screen-lines-between ee entry
-                              row (col->line-offset ee col)
+                              row (col->line-offset ee entry row col)
                               new-row new-row-offset))
-       (let ([screen-col (col->screen-col ee col)]
-             [new-screen-col (col->screen-col ee new-col)])
+       (let ([screen-col (col->screen-col ee entry row col)]
+             [new-screen-col (col->screen-col ee entry new-row new-col)])
          (cond
            [(fx> new-screen-col screen-col)
             (move-cursor-right (fx- new-screen-col screen-col))]
@@ -699,7 +763,7 @@
        ; move cursor to physical col 0 of first line after old bot-line
        (move-cursor-down
         (screen-lines-between ee entry
-                              row (col->line-offset ee col)
+                              row (col->line-offset ee entry row col)
                               (pos-row bot-line) (pos-col bot-line)))
        (carriage-return)
        (line-feed)
@@ -709,7 +773,7 @@
                                     new-row new-row-offset)
              (display-partial-entry ee entry (fx+ r 1) 0
                                     new-row new-row-offset)))
-       (move-cursor-right (col->screen-col ee new-col))
+       (move-cursor-right (col->screen-col ee entry new-row new-col))
        (set-entry-col! entry new-col)
        (set-entry-row! entry new-row)
        (when (pos>? new-top-line (entry-top-line entry))
@@ -737,7 +801,7 @@
        (display-partial-entry ee entry
                               (pos-row new-top-line) (pos-col new-top-line)
                               new-row new-row-offset)
-       (move-cursor-right (col->screen-col ee new-col))
+       (move-cursor-right (col->screen-col ee entry new-row new-col))
        (set-entry-col! entry new-col)
        (set-entry-row! entry new-row)
        (set-entry-top-line! entry new-top-line)
@@ -800,7 +864,7 @@
   (let* ([last-row (fx- (length (entry-lns entry)) 1)]
          [row (entry-row entry)]
          [col (entry-col entry)]
-         [point-line-offset (col->line-offset ee col)]
+         [point-line-offset (col->line-offset ee entry row col)]
          [top-line (entry-top-line entry)]
          [bot-line (entry-bot-line entry)]
          [n (screen-lines-between ee entry
@@ -814,7 +878,7 @@
           (let ([c (fxmin col (string-length (lns->str (entry-lns entry) r)))])
             (if (<= (screen-lines-between ee entry
                                           row point-line-offset
-                                          r (col->line-offset ee c))
+                                          r (col->line-offset ee entry r c))
                     n)
                 (goto-forward ee entry r c)
                 (f (fx- r 1))))))))
@@ -822,7 +886,7 @@
 (define (page-up ee entry)
   (let* ([row (entry-row entry)]
          [col (entry-col entry)]
-         [point-line-offset (col->line-offset ee col)]
+         [point-line-offset (col->line-offset ee entry row col)]
          [top-line (entry-top-line entry)]
          [bot-line (entry-bot-line entry)]
          [n (screen-lines-between ee entry
@@ -835,7 +899,7 @@
                            (fxmin col (string-length (lns->str (entry-lns entry) (fx- r 1))))))
           (let ([c (fxmin col (string-length (lns->str (entry-lns entry) r)))])
             (if (<= (screen-lines-between ee entry
-                                          r (col->line-offset ee c)
+                                          r (col->line-offset ee entry r c)
                                           row point-line-offset)
                     n)
                 (goto-backward ee entry r c)
@@ -940,20 +1004,30 @@
        (define str (ln-str (car lns)))
        (define colors (ln-colors (car lns)))
        (define len (string-length str))
-       (define next-color
-         (for/fold ([current-color current-color]) ([j (in-range len)])
+       (define-values (next-color pcol)
+         (for/fold ([current-color current-color] [pcol #f]) ([j (in-range len)])
            (define new-color (vector-ref new-colors (+ i j)))
            (cond
              [(= new-color (vector-ref colors j))
-              current-color]
+              (values current-color #f)]
              [else
               (vector-set! colors j new-color)
               (goto ee entry (make-pos row j))
               (unless (eqv? current-color new-color)
                 (set-fg-color new-color))
-              (ee-display-string (string (string-ref str j)))
-              (set-entry-col! entry (add1 (entry-col entry)))
-              new-color])))
+              (define w (ee-write-char (string-ref str j)))
+              (define new-pcol
+                (if pcol
+                    (+ pcol w)
+                    (+ (col->screen-col ee entry row j) w)))
+              (cond
+                [(new-pcol . fx>= . (entry-screen-cols entry))
+                 ;; avoid end-of-line edge case by moving to start of character
+                 (move-cursor-left w)
+                 (values new-color #f)]
+                [else
+                 (set-entry-col! entry (add1 (entry-col entry)))
+                 (values new-color new-pcol)])])))
        (loop (cdr lns) (+ i len 1) (add1 row) next-color)])))
 
 (define (replace-cdr l lh lt)
@@ -986,6 +1060,14 @@
          [new-col (fx+ col (string-length new-str))]
          [nsr (ln-nsr ln)]
          [eoe? (end-of-entry? ee entry)])
+    ;; beware of inserting just before a multicell character that has
+    ;; moved to the next line leaving a blank cell at the end of a
+    ;; row, in which case inserting could shift the logical->physical
+    ;; calculation for the point
+    (let ([pcol (col->screen-col ee entry row col)])
+      (when (and (col . fx> . 0) (fx= 0 pcol))
+        (move-left ee entry 1)
+        (set-entry-col! entry (fx- col 1))))
     (ln-str-set! ee ln
                  (string-append
                   (substring str 0 col)
@@ -1053,11 +1135,12 @@
   (fx= (entry-row entry) (fx1- (length (entry-lns entry)))))
 
 (define (last-line-displayed? ee entry)
-  (pos=? (make-pos (entry-row entry) (col->line-offset ee (entry-col entry)))
+  (define row (entry-row entry))
+  (pos=? (make-pos row (col->line-offset ee entry row (entry-col entry)))
          (entry-bot-line entry)))
 
 (define (visible? ee entry row col)
-  (let ([line (make-pos row (col->line-offset ee col))])
+  (let ([line (make-pos row (col->line-offset ee entry row col))])
     (and (pos<=? (entry-top-line entry) line)
          (pos<=? line (entry-bot-line entry)))))
 
@@ -1106,7 +1189,7 @@
     (let* ([nrows (or nrows (screen-rows))] ; want new screen-rows
            [row (entry-row entry)]
            [col (entry-col entry)]
-           [point-line (make-pos row (col->line-offset ee col))])
+           [point-line (make-pos row (col->line-offset ee entry row col))])
       (set-entry-bot-line! entry
                            (calc-bot-line-displayed entry (entry-top-line entry) nrows))
       (when (pos>? point-line (entry-bot-line entry))
@@ -1125,7 +1208,7 @@
          (screen-lines-between ee entry
                                (pos-row point-line) (pos-col point-line)
                                (pos-row bot-line) (pos-col bot-line)))
-        (move-cursor-right (col->screen-col ee col))))))
+        (move-cursor-right (col->screen-col ee entry row col))))))
 
 (define (flash ee entry mpos)
   (let ([point-pos (entry-point entry)])
@@ -1141,8 +1224,8 @@
                                     (pos-row (entry-top-line entry))
                                     (pos-col (entry-top-line entry))
                                     (pos-row point-pos)
-                                    (col->line-offset ee (pos-col point-pos)))]
-             [ncols (col->screen-col ee (pos-col point-pos))])
+                                    (col->line-offset ee entry (pos-row point-pos) (pos-col point-pos)))]
+             [ncols (col->screen-col ee entry (pos-row point-pos) (pos-col point-pos))])
          (move-cursor-left ncols)
          (move-cursor-up nlines)
          (ee-flush)
@@ -1153,10 +1236,10 @@
        (let ([nlines
               (screen-lines-between ee entry
                                     (pos-row point-pos)
-                                    (col->line-offset ee (pos-col point-pos))
+                                    (col->line-offset ee entry (pos-row point-pos) (pos-col point-pos))
                                     (pos-row (entry-bot-line entry))
                                     (pos-col (entry-top-line entry)))]
-             [ncols (col->screen-col ee (pos-col point-pos))])
+             [ncols (col->screen-col ee entry (pos-row point-pos) (pos-col point-pos))])
          (move-cursor-left ncols)
          (move-cursor-down nlines)
          (ee-flush)
@@ -1581,7 +1664,7 @@
            [lines-to-top ; compute before we muck with indentation
             (screen-lines-between ee entry
                                   (pos-row top-line) (pos-col top-line)
-                                  row (col->line-offset ee col))])
+                                  row (col->line-offset ee entry row col))])
       (let loop ([ls lns] [i 0] [firstmod (length lns)] [lastmod -1])
         (if (null? ls)
             (unless (and (fx< lastmod (pos-row top-line))

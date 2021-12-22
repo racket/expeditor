@@ -121,13 +121,16 @@
 ; furthermore, ee-write-char should never be used to write past the end
 ; of a screen line.
 (define (ee-write-char c)
-  (set! cursor-col (fx+ cursor-col 1))
-  (if (fx= cursor-col cols)
-      (begin
-        (exit-am-mode)
-        ($ee-write-char c)
-        (enter-am-mode))
-      ($ee-write-char c)))
+  (define len
+    (if (and cols (fx= (fx+ cursor-col 1) cols))
+        (begin
+          (exit-am-mode)
+          (begin0
+            ($ee-write-char c)
+            (enter-am-mode)))
+        ($ee-write-char c)))
+  (set! cursor-col (fx+ cursor-col len))
+  len)
 
 ; comments regarding ee-write-char above apply also to ee-display-string
 (define (ee-display-string s)

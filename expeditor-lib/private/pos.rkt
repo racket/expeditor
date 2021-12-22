@@ -34,7 +34,7 @@
            (fx>= (pos-col p1) (pos-col p2)))))
 (define (index->pos s n r c)
   ; convert index in single-string representation of entry
-  ; into pos.  r and c are row and col at which string
+  ; into pos.  r and c are logical row and col at which string
   ; starts in the entry
   (let f ([i 0] [r r] [c c])
     (if (fx= i n)
