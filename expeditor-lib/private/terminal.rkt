@@ -50,10 +50,9 @@
                          w))
 (define char-width (lambda (c)
                      ;; we're only set up to handle characters
-                     ;; that are extra-wide; we're assuming that
-                     ;; control characters or 0-width characters are
-                     ;; not relevant, at least for now
-                     (max 1 (or (hash-ref char-widths c #f)
+                     ;; that are non-negative sized, so we don't
+                     ;; handle control characters
+                     (max 0 (or (hash-ref char-widths c #f)
                                 (terminal-char-width c)))))
 (define set-color terminal-set-color)
 (define ee-flush terminal-flush)
