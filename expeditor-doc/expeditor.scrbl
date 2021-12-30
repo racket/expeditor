@@ -613,9 +613,9 @@ Returns a path that is used by @racket[expeditor-configure].
 
 If @racket[(find-system-path 'init-dir)] produces a different result
 than @racket[(find-system-path 'home-dir)], then the result is
-@racket[(build-path (find-system-path 'init-dir) "exeditor.rkt")].
+@racket[(build-path (find-system-path 'init-dir) "expeditor.rkt")].
 Otherwise, the result is @racket[(build-path (find-system-path
-'home-dir) ".exeditor.rkt")].}
+'home-dir) ".expeditor.rkt")].}
 
 
 @defparam[current-expeditor-reader proc (input-port? . -> . any/c)]{
