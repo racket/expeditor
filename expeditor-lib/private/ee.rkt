@@ -1277,7 +1277,7 @@
               (let ([cexp (expected (string-ref (ln-str ln) (pos-col mpos)))])
                 (unless (eqv? c cexp)
                   (string-set! str col cexp)
-                  (define color (vector-ref (ln-colors ln) col))
+                  (define color (vector-ref colors col))
                   (unless (eqv? color default-color)
                     (set-fg-color color))
                   (ee-write-char cexp)
