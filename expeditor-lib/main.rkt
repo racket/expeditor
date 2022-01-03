@@ -1,6 +1,7 @@
 #lang racket/base
 (require racket/fixnum
          racket/file
+         racket/match
          racket/symbol
          racket/interaction-info
          "private/port.rkt"
@@ -38,6 +39,9 @@
 (module+ configure
   (provide expeditor-set-syntax-color!
            expeditor-bind-key!
+
+           expeditor-set-backward-history-starting-position!
+           expeditor-set-forward-history-starting-position!
 
            eestate?
            entry?
@@ -580,9 +584,15 @@
       (let ([entry (string->entry ee s)])
         (redisplay ee entry #f) ; Chez Scheme behavior is 1 instead of #f here
         (recolor ee entry)
-        (if (eq? dir 'up)
-            (move-eol ee entry)
-            (move-eoe ee entry))
+        (cond
+          [(eq? dir 'up)
+           (if (ee-move-to-top-on-bwd-history?)
+               (move-eol ee entry)
+               (move-eoe ee entry))]
+          [else
+           (if (ee-move-to-bottom-on-fwd-history?)
+               (move-eoe ee entry)
+               (move-eol ee entry))])
         entry)))
 
   (define ee-history-bwd
@@ -1196,6 +1206,36 @@
                  (let ([entry ((car p*) ee entry c)])
                    (and entry (f (cdr p*) entry))))))])
     ee-composition))
+
+(define-public (expeditor-set-backward-history-starting-position!
+                expeditor-set-forward-history-starting-position!
+                ee-move-to-top-on-bwd-history?
+                ee-move-to-bottom-on-fwd-history?)
+
+  (define expeditor-backward-history-starting-position 'top)
+  (define expeditor-forward-history-starting-position 'bottom)
+
+  (define (expeditor-set-backward-history-starting-position! position)
+    (match position
+      [(or 'top 'bottom)
+       (set! expeditor-backward-history-starting-position position)]
+      [_
+       (error 'expeditor-set-backward-history-starting-position!
+              "~s must be 'top or 'bottom" position)]))
+
+  (define (expeditor-set-forward-history-starting-position! position)
+    (match position
+      [(or 'top 'bottom)
+       (set! expeditor-forward-history-starting-position position)]
+      [_
+       (error 'expeditor-set-forwrad-history-starting-position!
+              "~s must be 'top or 'bottom" position)]))
+
+  (define (ee-move-to-top-on-bwd-history?)
+    (equal? expeditor-backward-history-starting-position 'top))
+
+  (define (ee-move-to-bottom-on-fwd-history?)
+    (equal? expeditor-backward-history-starting-position 'top)))
 
 ;;; key bindings
 
