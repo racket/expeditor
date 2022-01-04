@@ -468,12 +468,12 @@ of tabbing.}
 
 @keyproc[ee-redisplay]{@see-key["^L"]}
 
-@keyproc[ee-history-bwd]{@see-key["Esc-Up"]}
-@keyproc[ee-history-fwd]{@see-key["Esc-Down"]}
-@keyproc[ee-history-bwd-prefix]{@see-key["Esc-p"]}
-@keyproc[ee-history-bwd-contains]{@see-key["Esc-P"]}
-@keyproc[ee-history-fwd-prefix]{@see-key["Esc-n"]}
-@keyproc[ee-history-fwd-contains]{@see-key["Esc-N"]}
+@keyproc[ee-history-bwd]{@see-key["Esc-Up"] See also @racket[current-ee-backward-history-point].}
+@keyproc[ee-history-fwd]{@see-key["Esc-Down"] See also @racket[current-ee-forward-history-point].}
+@keyproc[ee-history-bwd-prefix]{@see-key["Esc-p"] See also @racket[current-ee-backward-history-point].}
+@keyproc[ee-history-bwd-contains]{@see-key["Esc-P"] See also @racket[current-ee-backward-history-point].}
+@keyproc[ee-history-fwd-prefix]{@see-key["Esc-n"] See also @racket[current-ee-forward-history-point].}
+@keyproc[ee-history-fwd-contains]{@see-key["Esc-N"] See also @racket[current-ee-forward-history-point].}
 
 @keyproc[ee-command-repeat]{
 
@@ -481,7 +481,7 @@ Accumulates @racket[c] into a repeat count if it is a digit.
 Otherwise, performs the command associated with @racket[c] the number
 of times set up for repeating.}
 
-@keyproc[ee-suspend-process]{@see-key["^Z"]}))
+@keyproc[ee-suspend-process]{@see-key["^Z"]}
 
 
 @defproc[(eestate? [v any/c]) boolean?]{
@@ -525,6 +525,37 @@ editor region, @racket[#f] otherwise.}
 Sets the color used for a syntactic category when coloring is enabled.
 The @racket['error] color is used by @racket[expeditor-error-display]
 in addition to being used for invalid tokens.}
+
+@; ----------------------------------------
+
+@subsection{History Navigation}
+
+@defparam[current-ee-backward-history-point start-at (or/c 'start 'top 'bottom 'end)]{
+
+A parameter that determines where the cursor starts when the editor
+content is changed to an earlier entry in the history via
+@racket[ee-history-bwd] and similar functions:
+
+@itemlist[
+
+ @item{@racket['start] --- at the start of the entry}
+
+ @item{@racket['top] --- at the end of the first line of the entry}
+
+ @item{@racket['bottom] or @racket['end] --- at the end of the last line of the entry}
+
+]
+
+The default is @racket['top].}
+
+
+@defparam[current-ee-forward-history-point start-at (or/c 'start 'top 'bottom 'end)]{
+
+Like @racket[current-ee-backward-history-point], but used when the
+editor content is changed to a later entry in the history via
+@racket[ee-history-fwd] and similar functions.
+
+The default is @racket['bottom].}
 
 @; ----------------------------------------
 

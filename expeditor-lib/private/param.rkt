@@ -24,7 +24,9 @@
          current-expeditor-history
          current-expeditor-indenter
          current-expeditor-color-enabled
-         current-expeditor-history-whitespace-trim-enabled)
+         current-expeditor-history-whitespace-trim-enabled
+         current-ee-backward-history-point
+         current-ee-forward-history-point)
 
 (define (fxnonnegative? v)
   (and (fixnum? v)
@@ -172,3 +174,18 @@
 (define current-expeditor-history-whitespace-trim-enabled
   (make-parameter #t
                   (lambda (v) (and v #t))))
+
+(define (check-point-position who v)
+  (unless (memq v '(start top bottom end))
+    (raise-argument-error who "(or/c 'start 'top 'bottom 'end)" v))
+  v)
+
+(define current-ee-backward-history-point
+  (make-parameter 'top
+                  (lambda (v)
+                    (check-point-position 'current-ee-backward-history-point v))))
+
+(define current-ee-forward-history-point
+  (make-parameter 'bottom
+                  (lambda (v)
+                    (check-point-position 'current-ee-forward-history-point v))))

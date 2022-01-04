@@ -113,7 +113,10 @@
            ee-history-fwd-contains
 
            ee-command-repeat
-           ee-suspend-process))
+           ee-suspend-process
+
+           current-ee-backward-history-point
+           current-ee-forward-history-point))
 
 ;;; Based on:
 ;;;
@@ -580,9 +583,12 @@
       (let ([entry (string->entry ee s)])
         (redisplay ee entry #f) ; Chez Scheme behavior is 1 instead of #f here
         (recolor ee entry)
-        (if (eq? dir 'up)
-            (move-eol ee entry)
-            (move-eoe ee entry))
+        (case (if (eq? dir 'up)
+                  (current-ee-backward-history-point)
+                  (current-ee-forward-history-point))
+          [(start) (void)]
+          [(top) (move-eol ee entry)]
+          [(bottom end) (move-eoe ee entry)])
         entry)))
 
   (define ee-history-bwd
