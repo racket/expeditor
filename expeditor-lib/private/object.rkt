@@ -230,4 +230,6 @@
         [else
          (error 'skip-whitespace "bad direction: ~e" dir)]))
 
-    (define/public (get-backward-navigation-limit pos) 0)))
+    (define/public (get-backward-navigation-limit pos) 0)
+
+    (define/public (get-regions) '((0 end)))))
