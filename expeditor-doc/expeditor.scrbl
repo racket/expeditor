@@ -583,22 +583,34 @@ resources, if any. The result is the expeditor's history as
 initialized by @racket[expeditor-open] and updated by
 @racket[expeditor-read] calls.}
 
-@defproc[(expeditor-read [ee estate?]) any/c]{
+@defproc[(expeditor-read [ee estate?]
+                         [#:prompt prompt-str string? ">"])
+         any/c]{
 
 Reads input from the terminal. The @racket[ee] argument holds terminal
 state as well as history that is updated during
-@racket[expeditor-read].}
+@racket[expeditor-read]. The @racket[prompt-str] is used as a prompt;
+a space is added between @racket[prompt-str] and input, unless
+@racket[prompt-str] is @racket[""].
 
-@defproc[(call-with-expeditor [proc ((-> any/c) -> any)]) any]{
+@history[#:changed "1.1" @elem{Added the @racket[#:prompt-str] argument.}]}
+
+@defproc[(call-with-expeditor [proc ((-> any/c) -> any)]
+                              [#:prompt prompt-str string? ">"])
+         any]{
 
 Combines @racket[expeditor-open], a call to @racket[proc], and
 @racket[expeditor-close], where the reading procedure passed to
 @racket[proc] can be called any number of times to read input.
+The @racket[prompt-str] argument is used in the same way as for
+@racket[expeditor-read].
 
 Expeditor history is initialized from
 @racket[current-expeditor-history] on open, and the value of
 @racket[current-expeditor-history] is updated with the new history on
-close.}
+close.
+
+@history[#:changed "1.1" @elem{Added the @racket[#:prompt-str] argument.}]}
 
 
 @defproc[(expeditor-configure) void?]{
