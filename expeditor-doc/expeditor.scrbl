@@ -593,7 +593,7 @@ state as well as history that is updated during
 a space is added between @racket[prompt-str] and input, unless
 @racket[prompt-str] is @racket[""].
 
-@history[#:changed "1.1" @elem{Added the @racket[#:prompt-str] argument.}]}
+@history[#:changed "1.1" @elem{Added the @racket[#:prompt] argument.}]}
 
 @defproc[(call-with-expeditor [proc ((-> any/c) -> any)]
                               [#:prompt prompt-str string? ">"])
@@ -610,7 +610,7 @@ Expeditor history is initialized from
 @racket[current-expeditor-history] is updated with the new history on
 close.
 
-@history[#:changed "1.1" @elem{Added the @racket[#:prompt-str] argument.}]}
+@history[#:changed "1.1" @elem{Added the @racket[#:prompt] argument.}]}
 
 
 @defproc[(expeditor-configure) void?]{
