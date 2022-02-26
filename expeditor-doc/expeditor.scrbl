@@ -350,6 +350,11 @@ keys:
 
 ]
 
+The result of a key binding is a potentially updated entry, where only
+predefined functions can update an entry, or @racket[#f] to indicate
+that the current entry should be accepted as an
+@racket[expeditor-read] result.
+
 As examples, here are a few bindings from the default set:
 
 @racketblock[
