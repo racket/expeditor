@@ -574,7 +574,12 @@ terminal ports and the terminal configuration is recognized, the
 result is a representation of the terminal state. The result is
 @racket[#f] if the expeditor cannot be initialized.
 
-The @racket[history] argument provides the }
+The @racket[history] argument provides the initial list of history
+entries, which is navigated by functions like @racket[ee-history-bwd].
+This history is updated as input is accepted during
+@racket[expeditor-read], and @racket[expeditor-close] reports an
+updated history. The amount of preserved history is limited.}
+
 
 @defproc[(expeditor-close [ee estate?]) (listof string?)]{
 
