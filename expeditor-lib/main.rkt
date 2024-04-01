@@ -189,8 +189,7 @@
           (ee-display-string (make-string (screen-cols) #\-))
           (carriage-return)
           (line-feed))
-        (when (current-expeditor-color-enabled)
-          (set-fg-color error-color))
+        (set-fg-color error-color)
         (let* ([s (let ([sop (open-output-string)])
                     (report sop)
                     (get-output-string sop))]
@@ -198,8 +197,7 @@
           (let loop ([i 0] [msg-lines 0])
             (if (= i n)
                 (begin
-                  (when (current-expeditor-color-enabled)
-                    (set-fg-color default-color))
+                  (set-fg-color default-color)
                   (when bars-around-read-errors?
                     (unless (fx< (screen-rows) 3)
                       (ee-display-string (make-string (screen-cols) #\-))
@@ -1531,12 +1529,10 @@
      (build-path init-dir "expeditor.rkt")]))
 
 (define (expeditor-error-display obj)
-  (when (current-expeditor-color-enabled)
-    (set-fg-color error-color))
+  (set-fg-color error-color)
   (ee-display-string obj)
-  (when (current-expeditor-color-enabled)
-    (set-fg-color default-color)
-    (ee-flush)))
+  (set-fg-color default-color)
+  (ee-flush))
 
 (module+ main
   (port-count-lines! (current-input-port))

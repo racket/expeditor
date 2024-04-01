@@ -181,4 +181,5 @@
       (wait (- ms 10)))))
 
 (define (set-fg-color color)
-  (set-color color #f))
+  (when (current-expeditor-color-enabled)
+    (set-color color #f)))
