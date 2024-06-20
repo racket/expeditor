@@ -600,7 +600,7 @@ a space is added between @racket[prompt-str] and input, unless
 
 @history[#:changed "1.1" @elem{Added the @racket[#:prompt] argument.}]}
 
-@defproc[(call-with-expeditor [proc ((-> any/c) -> any)]
+@defproc[(call-with-expeditor [proc ((->* () (#:prompt string?) any/c) -> any)]
                               [#:prompt prompt-str string? ">"])
          any]{
 
@@ -608,7 +608,8 @@ Combines @racket[expeditor-open], a call to @racket[proc], and
 @racket[expeditor-close], where the reading procedure passed to
 @racket[proc] can be called any number of times to read input.
 The @racket[prompt-str] argument is used in the same way as for
-@racket[expeditor-read].
+@racket[expeditor-read], the reading procedure can also receive an 
+optional string to update the @racket[prompt-str].
 
 Expeditor history is initialized from
 @racket[current-expeditor-history] on open, and the value of
