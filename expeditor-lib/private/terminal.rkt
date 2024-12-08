@@ -7,6 +7,7 @@
 (provide
  (protect-out init-term
               $ee-read-char/blocking
+              $ee-pending-winch?
               $ee-write-char
               char-width
               set-color
@@ -44,6 +45,7 @@
 
 (define init-term terminal-init)
 (define $ee-read-char/blocking terminal-read-char)
+(define $ee-pending-winch? terminal-pending-winch?)
 (define $ee-write-char (lambda (c)
                          (define w (terminal-write-char c))
 			 (cond
