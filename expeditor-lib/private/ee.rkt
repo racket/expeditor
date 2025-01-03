@@ -320,7 +320,7 @@
        0))
 
 (define (prompt-width ee)
-  (string-length (eestate-prompt ee)))
+  (string-length (regexp-replace* #rx"\033\\[[0-9;]*m" (eestate-prompt ee) "")))
 
 (define (str->nsr ee str)
   ;; we can't just divide by the screen width, because a double-wide
@@ -341,7 +341,7 @@
     (define ln (list-ref (entry-lns entry) row))
     (cond
       [(ln-unicell? ln)
-       (fxquotient (fx+ (string-length (eestate-prompt ee)) col) (screen-cols))]
+       (fxquotient (fx+ (prompt-width ee) col) (screen-cols))]
       [else
        (define str (ln-str ln))
        (let loop ([i 0] [col col] [offset 0] [prompt-len (prompt-width ee)])
@@ -364,7 +364,7 @@
     (define ln (list-ref (entry-lns entry) row))
     (cond
       [(ln-unicell? ln)
-       (fxremainder (fx+ col (string-length (eestate-prompt ee))) (screen-cols))]
+       (fxremainder (fx+ col (prompt-width ee)) (screen-cols))]
       [else
        (define str (ln-str ln))
        (let loop ([i 0] [col col] [prompt-len (prompt-width ee)])
@@ -1751,7 +1751,9 @@
                         (values prefix
                                 (sort (foldl (lambda (x suffix*)
                                                (cond
-                                                 [(completion prefix (symbol->string x))
+                                                 [(completion prefix (if (string? x)
+                                                                         x
+                                                                         (symbol->string x)))
                                                   => (lambda (suffix) (cons suffix suffix*))]
                                                  [else suffix*]))
                                              '()

@@ -1447,7 +1447,7 @@
   (lambda (proc #:prompt [prompt ">"])
     (unless (string? prompt) (raise-argument-error 'call-with-expeditor "string?" prompt))
     (let ([ee #f])
-      (define (expeditor-prompt-and-read n)
+      (define (expeditor-prompt-and-read n read-prompt)
         (if (cond
               [(eestate? ee) #t]
               [(eq? ee 'failed) #f]
@@ -1456,12 +1456,12 @@
                     (set! ee new-ee)
                     #t)]
               [else (set! ee 'failed) #f])
-            (ee-prompt-and-read ee n prompt)
+            (ee-prompt-and-read ee n read-prompt)
             (default-prompt-and-read n)))
       (let ([val* (call-with-values
                    (lambda ()
-                     (proc (lambda ()
-                             (expeditor-prompt-and-read 1))))
+                     (proc (lambda (#:prompt [read-prompt prompt])
+                             (expeditor-prompt-and-read 1 read-prompt))))
                    list)])
         (when (eestate? ee)
           (current-expeditor-history (expeditor-close ee)))
