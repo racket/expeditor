@@ -84,6 +84,10 @@ require holding the Shift key).
        it is typically drawn from the set of available top-level
        bindings.}
 
+  @key["Shift-Tab" ee-id-completion/indent/reverse]{Like Tab
+       completion or indentation, but cycles through indentation
+       options in reverse order.}
+
   @key["^R" ee-next-id-completion]{Steps through the next possible
        completion when there are multiple possible completions.}
 
@@ -417,6 +421,8 @@ case that the input should be accepted.}
 
 @keyproc[ee-id-completion/indent]{@see-key["Tab"]}
 
+@keyproc[ee-id-completion/indent/reverse]{@see-key["Shift-Tab"] @history[#:added "1.2"]}
+
 @keyproc[ee-id-completion]{
 
 Like @racket[ee-id-completion], but always attempts completion instead
@@ -647,8 +653,9 @@ following keys:
  @item{@racket['drracket:grouping-position] --- Sets
        @racket[current-expeditor-grouper].}
 
- @item{@racket['drracket:indentation] and
-       @racket['drracket:range-indentation] --- Sets
+ @item{@racket['drracket:indentation],
+       @racket['drracket:range-indentation],
+       and @racket['drracket:range-indentation/reverse-choices] --- Sets
        @racket[current-expeditor-indenter] based on a combination of
        both values.}
 
@@ -713,7 +720,14 @@ work. @see-dr["Keystrokes"]}
 @defparam[current-expeditor-indenter proc procedure?]{
 
 A parameter that determines how automatic indentation works.
-@see-dr["Indentation"].}
+It expects either three or four arguments: a representation of
+the editor, a position in the editor, a boolean indicating whether
+the indentation request is automatic due to starting a new line,
+and an optional boolean indicating whether to cycle through indentation
+choices in reverse order. The protocol for results is the same as an
+indentation function for DrRacket. @see-dr["Indentation"]
+
+@history[#:changed "1.2" @elem{Added support for an optional fourth argument.}]}
 
 @defparam[current-expeditor-color-enabled on? boolean?]{
 

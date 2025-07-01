@@ -57,6 +57,7 @@
 
            ee-id-completion
            ee-id-completion/indent
+           ee-id-completion/indent/reverse
            ee-next-id-completion
 
            ee-backward-char
@@ -363,7 +364,7 @@
       entry))
 
   (define ee-next-id-completion/indent
-    (lambda (ee entry c)
+    (lambda (ee entry c [reverse? #f])
       (cond
         [(and (eq? (eestate-last-op ee) ee-next-id-completion/indent)
               (eestate-cc? ee))
@@ -380,10 +381,10 @@
         [else
          (set-eestate-cc?! ee #f)
          (set-eestate-last-suffix*! ee '())
-         (ee-indent ee entry c)])))
+         (ee-indent ee entry c reverse?)])))
 )
   
-(define-public (ee-id-completion ee-id-completion/indent)
+(define-public (ee-id-completion ee-id-completion/indent ee-id-completion/indent/reverse)
   (define (display-completions prefix suffix*)
     (let* ([s* (map (lambda (suffix) (string-append prefix suffix)) suffix*)]
            [width (fx+ (apply fxmax (map string-length s*)) 2)]
@@ -458,8 +459,8 @@
             (beep "id-completion: no identifier to complete")))
       entry))
 
-  (define ee-id-completion/indent
-    (lambda (ee entry c)
+  (define id-completion/indent
+    (lambda (ee entry c [reverse? #f])
       (cond
         [(and (eq? (eestate-last-op ee) ee-id-completion/indent)
               (eestate-cc? ee))
@@ -489,7 +490,15 @@
            entry)]
         [else
          (set-eestate-cc?! ee #f)
-         (ee-indent ee entry c)])))
+         (ee-indent ee entry c reverse?)])))
+
+  (define ee-id-completion/indent
+    (lambda (ee entry c)
+      (id-completion/indent ee entry c #f)))
+
+  (define ee-id-completion/indent/reverse
+    (lambda (ee entry c)
+      (id-completion/indent ee entry c #t)))
   )
 
 (define (recolor ee entry)
@@ -752,8 +761,8 @@
       entry)))
 
 (define ee-indent
-  (lambda (ee entry c)
-    (indent ee entry)
+  (lambda (ee entry c [reverse? #f])
+    (indent ee entry #f reverse?)
     (recolor ee entry)
     entry))
 
@@ -1329,6 +1338,7 @@
 
  ; command completion
   (ebk "\t"       ee-id-completion/indent)            ; Tab
+  (ebk "\\e[Z"    ee-id-completion/indent/reverse)    ; Shift-Tab
   (ebk "^R"       ee-next-id-completion)              ; ^R
 
  ; cursor movement keys
@@ -1494,19 +1504,23 @@
     (when group
       (current-expeditor-grouper group)))
   (let* ([indent-range (info 'drracket:range-indentation #f)]
+         [indent-range/reverse-choices  (info 'drracket:range-indentation/reverse-choices #f)]
          [indent (or (info 'drracket:indentation #f)
                      (and (not indent-range)
                           (collection-file? "racket-indentation.rkt" "syntax-color")
                           (dynamic-require 'syntax-color/racket-indentation 'racket-amount-to-indent)))])
     (when (or indent indent-range)
       (current-expeditor-indenter
-       (lambda (t pos auto?)
+       (lambda (t pos auto? reverse?)
          (cond
            [(and auto? indent)
             (indent t pos)]
            [else
-            (define r (and indent-range
-                           (indent-range t pos pos)))
+            (define r (or (and reverse?
+                               indent-range/reverse-choices
+                               (indent-range/reverse-choices t pos pos))
+                          (and indent-range
+                               (indent-range t pos pos))))
             (if r
                 (if (null? r)
                     (list 0 "")
