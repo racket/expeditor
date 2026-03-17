@@ -35,7 +35,7 @@ multi-line editing with indentation and completion support within a
 terminal. It's based on Chez Scheme's expression editor, but adapts to
 Racket languages using the same hooks and APIs as DrRacket. Normally,
 the expeditor is run automatically by @racketmodname[xrepl
-#:indirect], which is turn loaded by the @exec{racket} command-line
+#:indirect], which in turn loaded by the @exec{racket} command-line
 executable.
 
 For customization of keybindings, see @secref["customization"]. To
